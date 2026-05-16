@@ -86,6 +86,10 @@ let friendsPresenceTimer: number | null = null
 
 const activeChat = computed(() => chats.value.find((c) => c.id === activeChatId.value) ?? null)
 const myUserId = ref<number | null>(null)
+const diamonds = computed(() => Number((auth.otherData as { diamonds?: number }).diamonds ?? 0))
+const diamondHudRef = ref<HTMLElement | null>(null)
+const diamondFlights = ref<Array<{ id: string; x0: number; y0: number; x1: number; y1: number }>>([])
+const celebratedTransferIds = new Set<number>()
 
 const friendsSortedForDisplay = computed(() => {
   const online = new Set(presenceOnlineUsers.value)
@@ -180,6 +184,67 @@ function appendMessageDedupe(chatId: number, row: MsgRow) {
   if (activeChatId.value !== chatId) return
   if (messages.value.some((m) => m.id === row.id)) return
   messages.value = [...messages.value, row]
+}
+
+type DiamondTransferMeta = { to_user_id?: number; amount?: number; commission?: number }
+
+function parseDiamondTransferMeta(body: string): DiamondTransferMeta | null {
+  try {
+    return JSON.parse(body) as DiamondTransferMeta
+  } catch {
+    return null
+  }
+}
+
+function launchDiamondFlyToHud() {
+  void nextTick(() => {
+    const hud = diamondHudRef.value
+    if (!hud) return
+    const hr = hud.getBoundingClientRect()
+    const x1 = hr.left + hr.width / 2
+    const y1 = hr.top + hr.height / 2
+    const x0 = window.innerWidth / 2
+    const y0 = window.innerHeight * 0.42
+    const id = `msg_df_${Date.now()}`
+    diamondFlights.value = [...diamondFlights.value, { id, x0, y0, x1, y1 }]
+    window.setTimeout(() => {
+      diamondFlights.value = diamondFlights.value.filter((d) => d.id !== id)
+      hud.classList.add('msg-wallet--pulse')
+      window.setTimeout(() => hud.classList.remove('msg-wallet--pulse'), 520)
+    }, 950)
+  })
+}
+
+function celebrateDiamondCredit(amount: number, balance?: number) {
+  if (balance != null) auth.mergeOtherData({ diamonds: balance })
+  void auth.refreshProfile()
+  const n = Math.max(0, Math.floor(amount))
+  if (n > 0) showToast(`+${n} алмазов на счёт`)
+  launchDiamondFlyToHud()
+  playSfx('diamond')
+}
+
+function tryCelebrateDiamondCredit(
+  m: MsgRow,
+  credit?: { user_id?: number; amount?: number; balance?: number },
+) {
+  if (celebratedTransferIds.has(m.id)) return
+  const uid = myUserId.value
+  if (uid == null) return
+  let amount = 0
+  let balance: number | undefined
+  if (credit?.user_id === uid) {
+    amount = Number(credit.amount) || 0
+    balance = credit.balance != null ? Number(credit.balance) : undefined
+  } else if (m.kind === 'diamond_transfer') {
+    const meta = parseDiamondTransferMeta(m.body)
+    if (!meta || meta.to_user_id !== uid) return
+    amount = Number(meta.amount) || 0
+  } else {
+    return
+  }
+  celebratedTransferIds.add(m.id)
+  celebrateDiamondCredit(amount, balance)
 }
 
 async function sendText() {
@@ -463,8 +528,10 @@ function connectWs() {
         chat_id?: number
         message?: MsgRow
         from_username?: string
+        diamond_credit?: { user_id?: number; amount?: number; balance?: number }
       }
       if (msg.type === 'message.new' && msg.message && msg.chat_id) {
+        tryCelebrateDiamondCredit(msg.message, msg.diamond_credit)
         appendMessageDedupe(msg.chat_id, msg.message)
         if (activeChatId.value === msg.chat_id) {
           void fetch(`/api/messenger/chats/${msg.chat_id}/read`, { method: 'POST', headers: authHeaders() })
@@ -532,12 +599,14 @@ onBeforeUnmount(() => {
 
 function displayBody(m: MsgRow): string {
   if (m.kind === 'diamond_transfer') {
-    try {
-      const j = JSON.parse(m.body) as { amount?: number; commission?: number }
-      return `Перевод алмазов: +${j.amount ?? '?'} (комиссия ${j.commission ?? '?'})`
-    } catch {
-      return m.body
+    const j = parseDiamondTransferMeta(m.body)
+    if (!j) return m.body
+    const uid = myUserId.value
+    const amt = j.amount ?? '?'
+    if (uid != null && j.to_user_id === uid) {
+      return `Вам перевели ${amt} алм.`
     }
+    return `Перевод алмазов: ${amt} (комиссия ${j.commission ?? '?'})`
   }
   return m.body
 }
@@ -548,6 +617,7 @@ function displayBody(m: MsgRow): string {
     <header class="msg-top">
       <button type="button" class="btn msg-back" @click="backHub">← Хаб</button>
       <h1 class="msg-title">Мессенджер</h1>
+      <span ref="diamondHudRef" class="msg-wallet" title="Баланс алмазов">💎 {{ diamonds }}</span>
       <div class="msg-top-actions">
         <button type="button" class="btn msg-btn-friends" @click="openFriendsModal">
           Друзья
@@ -805,6 +875,23 @@ function displayBody(m: MsgRow): string {
         </div>
       </div>
     </Teleport>
+
+    <Teleport to="body">
+      <div
+        v-for="d in diamondFlights"
+        :key="d.id"
+        class="msg-diamond-fly"
+        :style="{
+          '--x0': `${d.x0}px`,
+          '--y0': `${d.y0}px`,
+          '--x1': `${d.x1}px`,
+          '--y1': `${d.y1}px`,
+        }"
+        aria-hidden="true"
+      >
+        💎
+      </div>
+    </Teleport>
   </main>
 </template>
 
@@ -828,6 +915,53 @@ function displayBody(m: MsgRow): string {
   margin: 0;
   font-size: 1.25rem;
   flex: 1;
+}
+.msg-wallet {
+  font-size: 14px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(125, 211, 252, 0.35);
+  white-space: nowrap;
+  transition: transform 0.35s ease;
+}
+.msg-wallet--pulse {
+  animation: msgWalletPulse 0.5s ease;
+}
+@keyframes msgWalletPulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.12);
+  }
+}
+.msg-diamond-fly {
+  position: fixed;
+  left: var(--x0);
+  top: var(--y0);
+  z-index: 250;
+  font-size: 2rem;
+  pointer-events: none;
+  filter: drop-shadow(0 4px 12px rgba(100, 200, 255, 0.8));
+  animation: msgDiamondFly 0.92s cubic-bezier(0.25, 0.85, 0.35, 1) forwards;
+}
+@keyframes msgDiamondFly {
+  0% {
+    transform: translate(-50%, -50%) scale(1.2) rotate(-12deg);
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    left: var(--x1);
+    top: var(--y1);
+    transform: translate(-50%, -50%) scale(0.45) rotate(18deg);
+    opacity: 0.15;
+  }
 }
 .msg-top-actions {
   display: flex;

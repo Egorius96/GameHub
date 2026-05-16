@@ -38,7 +38,7 @@ async def rps_ws(websocket: WebSocket, token: str, room: int = 0) -> None:
     try:
         while True:
             try:
-                data = await asyncio.wait_for(websocket.receive_json(), timeout=0.5)
+                data = await asyncio.wait_for(websocket.receive_json(), timeout=0.2)
             except TimeoutError:
                 await rps_room_manager.tick_room(room)
                 presence.touch(username, settings.rps_game_key)

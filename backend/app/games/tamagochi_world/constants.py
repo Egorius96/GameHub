@@ -26,8 +26,10 @@ class TamagochiTuning:
     hp_down_per_sec_on_crit_sleep: float = 0.0015
     hp_up_per_sec_sleeping: float = 0.0030
 
-    # Бодрость (UI: 100 - sleepiness): полный сон ~10 ч реального времени
+    # Бодрость (UI: 100 - sleepiness): полный сон ~energy_recovery_hours_full ч;
+    # sleep_recovery_mult ускоряет и бодрость, и hp_up_per_sec_sleeping во сне одинаково.
     energy_recovery_hours_full: float = 10.0
+    sleep_recovery_mult: float = 2.0
     # Расход бодрости бодрствуя: границы 6–14 ч от активности и стресса (HP/голод/настроение)
     energy_drain_hours_min: float = 6.0
     energy_drain_hours_max: float = 14.0
@@ -84,10 +86,10 @@ class TamagochiTuning:
     map_food_spawn_min_interval_sec: float = 360.0
     map_food_spawn_max_interval_sec: float = 1100.0
 
-    # Wild diamonds: пауза между стартами поиска (base+rand)*factor; factor — как раньше из самочувствия и игрушки.
-    # Значения в 2 раза меньше прежних 240/360 с → новые окна поиска в среднем в 2 раза чаще при тех же коэффициентах.
-    diamond_cooldown_min_sec: float = 120.0
-    diamond_cooldown_rand_span_sec: float = 180.0
+    # Wild diamonds: пауза между стартами поиска (base+rand)*factor; factor — из самочувствия и игрушки.
+    # Ещё ×2 к 120/180 с → поиск стартует в среднем в 2 раза чаще.
+    diamond_cooldown_min_sec: float = 60.0
+    diamond_cooldown_rand_span_sec: float = 90.0
     diamond_search_duration_sec: float = 15.0
 
     # Карта: не показывать чужих питомцев, если хозяин не заходил в WS дольше этого (часы)

@@ -670,6 +670,11 @@ async def transfer_diamonds(
             "body": msg.body,
             "created_at": msg.created_at.isoformat(),
         },
+        "diamond_credit": {
+            "user_id": body.to_user_id,
+            "amount": a,
+            "balance": r_new,
+        },
     }
     await push_to_users(mids, payload)
     return {"message": payload["message"], "commission": f, "total_debit": total}

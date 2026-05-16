@@ -5,8 +5,7 @@ import asyncio
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.core.config import settings
-from app.core.security import decode_access_token
-from app.core.session import sessions
+from app.core.session_resolve import resolve_user_session
 from app.core.gameshub import ensure_pro_racing_schema, get_pro_racing_game
 from app.core.presence import presence
 from app.games.pro_racing.session_manager import session_manager
@@ -18,13 +17,13 @@ router = APIRouter(tags=["ws"])
 @router.websocket("/ws/game")
 async def game_ws(websocket: WebSocket, token: str, mode: str = "normal") -> None:
     await websocket.accept()
-    username = decode_access_token(token)
-    if username is None or token not in sessions:
+    session = resolve_user_session(token)
+    if session is None:
         await websocket.send_json({"type": "state.error", "message": "Unauthorized"})
         await websocket.close()
         return
 
-    session = sessions[token]
+    username = session.username
     presence.touch(username, "misha_pro_racing_game")
     other_data = ensure_pro_racing_schema(session.user.get("other_data", {}) or {})
     game = get_pro_racing_game(other_data)
@@ -40,8 +39,14 @@ async def game_ws(websocket: WebSocket, token: str, mode: str = "normal") -> Non
                     event_type = event.get("type")
                     if event_type == "input.move":
                         player = int(event.get("player", 1))
-                        direction = event.get("direction", "stop")
-                        engine.input_move(player, direction)
+                        if "dx" in event or "dy" in event:
+                            engine.input_move(
+                                player,
+                                dx=int(event.get("dx", 0)),
+                                dy=int(event.get("dy", 0)),
+                            )
+                        else:
+                            engine.input_move(player, str(event.get("direction", "stop")))
                     elif event_type == "input.ability":
                         engine.ability(event.get("ability", ""))
                     elif event_type == "session.restart":

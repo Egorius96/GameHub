@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
 import { useGameSocket } from './useGameSocket'
@@ -20,6 +20,17 @@ const mode = String(route.params.mode || 'normal')
 const gameData = computed(() => ((auth.otherData as any).games ?? {})?.misha_pro_racing_game ?? {})
 const carLevel = computed(() => Number((gameData.value as any).car_level ?? 1))
 const sceneEl = ref<HTMLDivElement | null>(null)
+const diamondHudRef = ref<HTMLElement | null>(null)
+const SCENE_W = 1200
+const SCENE_H = 700
+const BASE_ROCK_SPEED = 10
+const BASE_KMH = 60
+type DiamondFlight = { id: string; x0: number; y0: number; x1: number; y1: number }
+const diamondFlights = ref<DiamondFlight[]>([])
+const lastVisibleDiamond = ref<{ x: number; y: number } | null>(null)
+const secondsPulse = ref(false)
+let secondsPulseTimer: number | null = null
+const displaySeconds = ref(0)
 
 const modeTitle = computed(() => {
   if (mode === 'hard') return 'Сложный режим'
@@ -38,27 +49,58 @@ const carShieldImageByLevel: Record<number, string> = {
   3: '/assets/original/car_lvl3_shield.png',
 }
 
-const { state, move, ability, restart } = useGameSocket(auth.token, mode)
+const { state, wsError, connected, move, ability, restart, reconnect, disconnect, gameOver } =
+  useGameSocket(auth.token, mode)
+
+const ignoreGameOverUntil = ref(0)
+
+type MoveKey = 'up' | 'down' | 'left' | 'right'
+const keysP1 = new Set<MoveKey>()
+const keysP2 = new Set<MoveKey>()
+
+function keysToVector(keys: Set<MoveKey>): { dx: number; dy: number } {
+  let dx = 0
+  let dy = 0
+  if (keys.has('left')) dx -= 1
+  if (keys.has('right')) dx += 1
+  if (keys.has('up')) dy -= 1
+  if (keys.has('down')) dy += 1
+  return { dx, dy }
+}
+
+function syncMovement(player: 1 | 2) {
+  const keys = player === 1 ? keysP1 : keysP2
+  const { dx, dy } = keysToVector(keys)
+  move(dx, dy, player)
+}
+
+function setKeyHeld(key: MoveKey, player: 1 | 2, held: boolean) {
+  const keys = player === 1 ? keysP1 : keysP2
+  if (held) keys.add(key)
+  else keys.delete(key)
+  syncMovement(player)
+}
+
+function keyFromEvent(e: KeyboardEvent): { key: MoveKey; player: 1 | 2 } | null {
+  const isPvp = mode === 'pvp_local'
+  if (e.code === 'KeyW') return { key: 'up', player: 1 }
+  if (e.code === 'KeyS') return { key: 'down', player: 1 }
+  if (e.code === 'KeyA') return { key: 'left', player: 1 }
+  if (e.code === 'KeyD') return { key: 'right', player: 1 }
+  if (e.key === 'ArrowUp') return { key: 'up', player: isPvp ? 2 : 1 }
+  if (e.key === 'ArrowDown') return { key: 'down', player: isPvp ? 2 : 1 }
+  if (e.key === 'ArrowLeft') return { key: 'left', player: isPvp ? 2 : 1 }
+  if (e.key === 'ArrowRight') return { key: 'right', player: isPvp ? 2 : 1 }
+  return null
+}
 
 const keyHandler = (e: KeyboardEvent) => {
   startGameMusic()
-  const isPvp = mode === 'pvp_local'
-  const arrowPlayer = isPvp ? 2 : 1
-  if (
-    ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) ||
-    ['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(e.code)
-  ) {
+  const mapped = keyFromEvent(e)
+  if (mapped) {
     e.preventDefault()
+    setKeyHeld(mapped.key, mapped.player, true)
   }
-  if (e.code === 'KeyW') move('up', 1)
-  if (e.code === 'KeyS') move('down', 1)
-  if (e.code === 'KeyA') move('left', 1)
-  if (e.code === 'KeyD') move('right', 1)
-
-  if (e.key === 'ArrowUp') move('up', arrowPlayer)
-  if (e.key === 'ArrowDown') move('down', arrowPlayer)
-  if (e.key === 'ArrowLeft') move('left', arrowPlayer)
-  if (e.key === 'ArrowRight') move('right', arrowPlayer)
 
   if (e.code === 'KeyE') ability('drugs')
   if (e.code === 'KeyQ') ability('immue')
@@ -67,28 +109,29 @@ const keyHandler = (e: KeyboardEvent) => {
 }
 
 const keyUpHandler = (e: KeyboardEvent) => {
-  const isPvp = mode === 'pvp_local'
-  const arrowPlayer = isPvp ? 2 : 1
-  if (e.key.startsWith('Arrow') || ['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(e.code)) e.preventDefault()
-  if (['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(e.code)) move('stop', 1)
-  if (e.key.startsWith('Arrow')) move('stop', arrowPlayer)
+  const mapped = keyFromEvent(e)
+  if (mapped) {
+    e.preventDefault()
+    setKeyHeld(mapped.key, mapped.player, false)
+  }
+}
+
+function padHold(key: MoveKey, held: boolean) {
+  setKeyHeld(key, 1, held)
 }
 
 onMounted(() => {
   sceneEl.value?.focus()
-  sceneEl.value?.addEventListener('keydown', keyHandler)
-  sceneEl.value?.addEventListener('keyup', keyUpHandler)
-  window.addEventListener('keydown', keyHandler, { capture: true })
-  window.addEventListener('keyup', keyUpHandler, { capture: true })
+  window.addEventListener('keydown', keyHandler)
+  window.addEventListener('keyup', keyUpHandler)
 })
 
 startHeartbeat(auth.token, 'misha_pro_racing_game')
 startPresencePing(auth.token, 'misha_pro_racing_game')
 onBeforeUnmount(() => {
-  sceneEl.value?.removeEventListener('keydown', keyHandler)
-  sceneEl.value?.removeEventListener('keyup', keyUpHandler)
-  window.removeEventListener('keydown', keyHandler, { capture: true } as any)
-  window.removeEventListener('keyup', keyUpHandler, { capture: true } as any)
+  window.removeEventListener('keydown', keyHandler)
+  window.removeEventListener('keyup', keyUpHandler)
+  if (secondsPulseTimer) window.clearTimeout(secondsPulseTimer)
   stopMusic()
   stopHeartbeat()
   stopPresencePing()
@@ -108,6 +151,8 @@ watch(
   state,
   async (s) => {
     if (!s) return
+    await nextTick()
+    sceneEl.value?.focus()
     startGameMusic()
 
     const lives = Number(s.player1?.lives ?? 0)
@@ -118,11 +163,32 @@ watch(
     }
     prevLives.value = lives
 
+    const d = s.diamond as { x?: number; y?: number } | undefined
+    if (d && Number(d.x) > -100) {
+      lastVisibleDiamond.value = { x: Number(d.x), y: Number(d.y) }
+    }
+
+    const sec = Number(s.seconds ?? 0)
+    if (sec !== displaySeconds.value) {
+      displaySeconds.value = sec
+      secondsPulse.value = true
+      if (secondsPulseTimer) window.clearTimeout(secondsPulseTimer)
+      secondsPulseTimer = window.setTimeout(() => {
+        secondsPulse.value = false
+        secondsPulseTimer = null
+      }, 450)
+    }
+
     const dc = Number(s.diamonds_collected ?? 0)
-    if (dc > prevDiamCollected.value) playProRacingSfx('diamond')
+    if (dc > prevDiamCollected.value) {
+      playProRacingSfx('diamond')
+      const pos = lastVisibleDiamond.value
+      if (pos) launchDiamondFlyFromGame(pos.x + 50, pos.y + 30)
+      else launchDiamondFlyFromGame(Number(s.player1?.x ?? 600) + 75, Number(s.player1?.y ?? 350))
+    }
     prevDiamCollected.value = dc
 
-    if (s.game_over) {
+    if (s.game_over && Date.now() >= ignoreGameOverUntil.value) {
       showGameOver.value = true
       if (!gameOverSfxPlayed.value) {
         playProRacingSfx('gameover')
@@ -135,34 +201,89 @@ watch(
   { deep: true },
 )
 
-/** Как в pro_racing_v3.0.py: шаг 230px по X, скорость 2px/кадр при ~30 тиках/с → ~60px/с */
+/** Как в pro_racing_v3.0.py: шаг 230px по X; скролл полосы привязан к speed_rock (60 км/ч при 10) */
 const LANE_CYCLE_PX = 230
-const LANE_SCROLL_PX_PER_SEC = 60
-const laneDashDurationSec = LANE_CYCLE_PX / LANE_SCROLL_PX_PER_SEC
+const LANE_SCROLL_BASE_PX_PER_SEC = 60
+
+const rockSpeed = computed(() => Number(state.value?.speed_rock ?? BASE_ROCK_SPEED))
+
+const displayKmh = computed(() =>
+  Math.round(BASE_KMH * (rockSpeed.value / BASE_ROCK_SPEED))
+)
+
+const laneDashDurationSec = computed(() => {
+  const scrollPx = LANE_SCROLL_BASE_PX_PER_SEC * (rockSpeed.value / BASE_ROCK_SPEED)
+  return LANE_CYCLE_PX / Math.max(scrollPx, 1)
+})
 
 const hudLine = computed(() => {
   if (!state.value) return ''
   const p1 = state.value.player1
   const p2 = state.value.player2
   return mode === 'pvp_local'
-    ? `P1 ❤ ${p1?.lives ?? 0} · P2 ❤ ${p2?.lives ?? 0} · ${state.value.seconds} с`
-    : `❤ ${p1?.lives ?? 0} · ${state.value.seconds} с`
+    ? `P1 ❤ ${p1?.lives ?? 0} · P2 ❤ ${p2?.lives ?? 0}`
+    : `❤ ${p1?.lives ?? 0}`
 })
+
+function gameToScreen(gx: number, gy: number): { x: number; y: number } {
+  const el = sceneEl.value
+  if (!el) return { x: window.innerWidth / 2, y: window.innerHeight / 2 }
+  const r = el.getBoundingClientRect()
+  const sx = r.width / SCENE_W
+  const sy = r.height / SCENE_H
+  return { x: r.left + gx * sx, y: r.top + gy * sy }
+}
+
+function launchDiamondFlyFromGame(gx: number, gy: number) {
+  void nextTick(() => {
+    const hud = diamondHudRef.value
+    if (!hud) return
+    const { x: x0, y: y0 } = gameToScreen(gx, gy)
+    const hr = hud.getBoundingClientRect()
+    const x1 = hr.left + hr.width / 2
+    const y1 = hr.top + hr.height / 2
+    const id = `pr_df_${Date.now()}`
+    diamondFlights.value = [...diamondFlights.value, { id, x0, y0, x1, y1 }]
+    window.setTimeout(() => {
+      diamondFlights.value = diamondFlights.value.filter((d) => d.id !== id)
+      hud.classList.add('pr-game-hud-diamonds--pulse')
+      window.setTimeout(() => hud.classList.remove('pr-game-hud-diamonds--pulse'), 520)
+    }, 950)
+  })
+}
 
 function restartGame() {
   playProRacingSfx('button')
+  keysP1.clear()
+  keysP2.clear()
+  ignoreGameOverUntil.value = Date.now() + 800
   showGameOver.value = false
+  gameOver.value = false
   prevLives.value = null
   prevDiamCollected.value = 0
   gameOverSfxPlayed.value = false
+  displaySeconds.value = 0
+  secondsPulse.value = false
+  lastVisibleDiamond.value = null
+  diamondFlights.value = []
   startGameMusic()
-  restart()
+  if (connected.value) {
+    restart()
+  } else {
+    reconnect()
+  }
+  void nextTick(() => sceneEl.value?.focus())
 }
 
 function backToMenu() {
   playProRacingSfx('button')
+  keysP1.clear()
+  keysP2.clear()
+  disconnect()
   stopMusic()
-  router.push('/menu')
+  stopHeartbeat()
+  stopPresencePing()
+  void router.replace('/menu')
 }
 </script>
 
@@ -176,9 +297,13 @@ function backToMenu() {
           <p class="pr-game-kicker">Pro Racing</p>
           <h1 class="pr-game-title">{{ modeTitle }}</h1>
         </div>
+        <div class="pr-top-actions">
+          <button type="button" class="pr-btn pr-btn--ghost" @click="restartGame">Рестарт</button>
+          <button type="button" class="pr-btn" @click="backToMenu">В меню</button>
+        </div>
         <div v-if="state" class="pr-game-hud">
           <span class="pr-game-hud-line">{{ hudLine }}</span>
-          <span class="pr-game-hud-diamonds">
+          <span ref="diamondHudRef" class="pr-game-hud-diamonds" title="Копилка алмазов">
             <img src="/assets/original/brilliant.png" alt="" width="22" height="14" />
             {{ (auth.otherData as any).diamonds ?? 0 }}
           </span>
@@ -186,16 +311,28 @@ function backToMenu() {
       </header>
 
       <section class="pr-game-panel">
-        <div v-if="state" class="pr-scene-wrap">
+        <div class="pr-scene-wrap">
           <div
             ref="sceneEl"
             tabindex="0"
             class="pr-scene"
-            :class="{ 'pr-scene--paused': showGameOver }"
-            :style="{ '--lane-dash-dur': `${laneDashDurationSec}s` }"
+            :class="{
+              'pr-scene--paused': showGameOver && !!state,
+              'pr-scene--waiting': !state,
+            }"
+            :style="state ? { '--lane-dash-dur': `${laneDashDurationSec}s`, '--pr-kmh': displayKmh } : undefined"
             role="application"
             aria-label="Игровое поле"
           >
+            <div v-if="!state" class="pr-connect-overlay">
+              <p v-if="wsError" class="pr-connect-msg pr-connect-msg--error">{{ wsError }}</p>
+              <p v-else class="pr-connect-msg">Подключение к игре…</p>
+              <button v-if="wsError" type="button" class="pr-btn pr-btn--primary" @click="reconnect">
+                Переподключить
+              </button>
+            </div>
+
+            <template v-else>
             <div class="pr-scene-bg" aria-hidden="true" />
 
             <!-- Разметка как в оригинале: горизонтальные белые полосы 150×25, шаг 230px, едут влево -->
@@ -207,6 +344,18 @@ function backToMenu() {
             </div>
 
             <div class="pr-layer-ui">
+              <div class="pr-run-hud" aria-live="polite">
+                <div class="pr-run-time" :class="{ 'pr-run-time--pulse': secondsPulse }">
+                  <span class="pr-run-time-label">Время</span>
+                  <span class="pr-run-time-value" :key="'sec-' + displaySeconds">{{ displaySeconds }}</span>
+                  <span class="pr-run-time-unit">сек</span>
+                </div>
+                <div class="pr-run-speed">
+                  <span class="pr-run-speed-label">Скорость</span>
+                  <span class="pr-run-speed-value" :key="'kmh-' + displayKmh">{{ displayKmh }}</span>
+                  <span class="pr-run-speed-unit">км/ч</span>
+                </div>
+              </div>
               <div class="pr-lives pr-lives--p1">
                 <img v-for="i in Number(state.player1?.lives ?? 0)" :key="i" src="/assets/original/heart.png" alt="" />
               </div>
@@ -278,9 +427,11 @@ function backToMenu() {
                 </div>
               </div>
             </div>
+            </template>
           </div>
         </div>
 
+        <div class="pr-game-chrome">
         <p class="pr-hint">
           <template v-if="mode === 'pvp_local'">Игрок 1: <kbd>WASD</kbd> · Игрок 2: <kbd>стрелки</kbd></template>
           <template v-else>Управление: <kbd>WASD</kbd> или кнопки ниже</template>
@@ -289,11 +440,51 @@ function backToMenu() {
 
         <div class="pr-pad">
           <span />
-          <button type="button" class="pr-pad-btn" @click="move('up')">▲</button>
+          <button
+            type="button"
+            class="pr-pad-btn"
+            @mousedown.prevent="padHold('up', true)"
+            @mouseup="padHold('up', false)"
+            @mouseleave="padHold('up', false)"
+            @touchstart.prevent="padHold('up', true)"
+            @touchend.prevent="padHold('up', false)"
+          >
+            ▲
+          </button>
           <span />
-          <button type="button" class="pr-pad-btn" @click="move('left')">◀</button>
-          <button type="button" class="pr-pad-btn pr-pad-btn--mid" @click="move('down')">▼</button>
-          <button type="button" class="pr-pad-btn" @click="move('right')">▶</button>
+          <button
+            type="button"
+            class="pr-pad-btn"
+            @mousedown.prevent="padHold('left', true)"
+            @mouseup="padHold('left', false)"
+            @mouseleave="padHold('left', false)"
+            @touchstart.prevent="padHold('left', true)"
+            @touchend.prevent="padHold('left', false)"
+          >
+            ◀
+          </button>
+          <button
+            type="button"
+            class="pr-pad-btn pr-pad-btn--mid"
+            @mousedown.prevent="padHold('down', true)"
+            @mouseup="padHold('down', false)"
+            @mouseleave="padHold('down', false)"
+            @touchstart.prevent="padHold('down', true)"
+            @touchend.prevent="padHold('down', false)"
+          >
+            ▼
+          </button>
+          <button
+            type="button"
+            class="pr-pad-btn"
+            @mousedown.prevent="padHold('right', true)"
+            @mouseup="padHold('right', false)"
+            @mouseleave="padHold('right', false)"
+            @touchstart.prevent="padHold('right', true)"
+            @touchend.prevent="padHold('right', false)"
+          >
+            ▶
+          </button>
         </div>
 
         <div class="pr-abilities">
@@ -307,8 +498,26 @@ function backToMenu() {
           <button type="button" class="pr-btn pr-btn--ghost" @click="restartGame">Рестарт</button>
           <button type="button" class="pr-btn" @click="backToMenu">В меню</button>
         </div>
+        </div>
       </section>
     </div>
+
+    <Teleport to="body">
+      <img
+        v-for="d in diamondFlights"
+        :key="d.id"
+        class="pr-diamond-fly"
+        src="/assets/original/brilliant.png"
+        alt=""
+        :style="{
+          left: `${d.x0}px`,
+          top: `${d.y0}px`,
+          '--x1': `${d.x1}px`,
+          '--y1': `${d.y1}px`,
+        }"
+        aria-hidden="true"
+      />
+    </Teleport>
   </main>
 </template>
 
@@ -341,6 +550,15 @@ function backToMenu() {
   align-items: flex-start;
   gap: 14px;
   margin-bottom: 14px;
+  position: relative;
+  z-index: 30;
+}
+.pr-top-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  pointer-events: auto;
 }
 .pr-game-kicker {
   margin: 0 0 4px;
@@ -379,14 +597,53 @@ function backToMenu() {
   opacity: 0.95;
 }
 .pr-game-panel {
+  display: flex;
+  flex-direction: column;
   border-radius: 18px;
   padding: 14px;
   background: rgba(10, 14, 28, 0.55);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 .pr-scene-wrap {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
   border-radius: 14px;
   overflow: hidden;
+  pointer-events: none;
+}
+.pr-game-chrome {
+  position: relative;
+  z-index: 20;
+  flex: 0 0 auto;
+  pointer-events: auto;
+}
+.pr-scene--waiting {
+  background: linear-gradient(180deg, #0c1224 0%, #141c34 100%);
+}
+.pr-connect-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  text-align: center;
+  background: rgba(6, 10, 22, 0.88);
+}
+.pr-connect-msg {
+  margin: 0;
+  font-size: 15px;
+  opacity: 0.9;
+  max-width: 360px;
+  line-height: 1.45;
+}
+.pr-connect-msg--error {
+  color: #ffab91;
 }
 .pr-scene {
   position: relative;
@@ -399,6 +656,7 @@ function backToMenu() {
   outline: none;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
   border: 1px solid rgba(255, 255, 255, 0.12);
+  pointer-events: none;
 }
 .pr-scene-bg {
   position: absolute;
@@ -507,6 +765,7 @@ function backToMenu() {
   justify-content: center;
   background: rgba(4, 8, 18, 0.72);
   backdrop-filter: blur(4px);
+  pointer-events: auto;
 }
 .pr-modal {
   width: min(480px, 92%);
@@ -628,6 +887,7 @@ function backToMenu() {
   flex-wrap: wrap;
   gap: 10px;
   justify-content: center;
+  pointer-events: auto;
 }
 .pr-btn {
   padding: 12px 20px;
@@ -638,6 +898,7 @@ function backToMenu() {
   font: inherit;
   font-weight: 600;
   cursor: pointer;
+  pointer-events: auto;
 }
 .pr-btn:hover {
   border-color: rgba(140, 170, 255, 0.35);
@@ -648,5 +909,135 @@ function backToMenu() {
 .pr-btn--primary {
   border-color: rgba(100, 200, 160, 0.45);
   background: linear-gradient(180deg, rgba(120, 220, 170, 0.35), rgba(40, 120, 90, 0.45));
+}
+.pr-game-hud-diamonds--pulse {
+  animation: prHudDiamondPulse 0.5s ease;
+}
+@keyframes prHudDiamondPulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.14);
+  }
+}
+.pr-run-hud {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  left: auto;
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  align-items: stretch;
+  z-index: 4;
+  pointer-events: none;
+}
+.pr-run-time,
+.pr-run-speed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 92px;
+  padding: 8px 12px 6px;
+  border-radius: 18px;
+  background: rgba(8, 12, 28, 0.78);
+  border: 2px solid rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(8px);
+}
+.pr-run-time {
+  border-color: rgba(255, 200, 80, 0.45);
+}
+.pr-run-time--pulse {
+  animation: prTimePulse 0.45s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+@keyframes prTimePulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  }
+  40% {
+    transform: scale(1.08);
+    box-shadow: 0 0 36px rgba(255, 193, 7, 0.55);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.pr-run-speed {
+  border-color: rgba(100, 181, 246, 0.5);
+}
+.pr-run-time-label,
+.pr-run-speed-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.72;
+  margin-bottom: 4px;
+}
+.pr-run-time-value {
+  font-size: clamp(1.5rem, 4vw, 2rem);
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: #ffecb3;
+  text-shadow: 0 0 28px rgba(255, 193, 7, 0.55);
+  animation: prTimeDigitIn 0.35s cubic-bezier(0.34, 1.35, 0.64, 1);
+}
+.pr-run-time-unit,
+.pr-run-speed-unit {
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0.75;
+  margin-top: 2px;
+}
+.pr-run-speed-value {
+  font-size: clamp(1.25rem, 3.5vw, 1.65rem);
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: #90caf9;
+  text-shadow: 0 0 20px rgba(66, 165, 245, 0.45);
+  transition: color 0.25s ease;
+}
+@keyframes prTimeDigitIn {
+  from {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.pr-diamond-fly {
+  position: fixed;
+  z-index: 300;
+  width: 48px;
+  height: auto;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(0 4px 14px rgba(100, 200, 255, 0.85));
+  animation: prDiamondFly 0.92s cubic-bezier(0.25, 0.85, 0.35, 1) forwards;
+}
+@keyframes prDiamondFly {
+  0% {
+    left: var(--x0, 50%);
+    top: var(--y0, 50%);
+    transform: translate(-50%, -50%) scale(1.15) rotate(-8deg);
+    opacity: 1;
+  }
+  100% {
+    left: var(--x1);
+    top: var(--y1);
+    transform: translate(-50%, -50%) scale(0.35) rotate(12deg);
+    opacity: 0.2;
+  }
 }
 </style>

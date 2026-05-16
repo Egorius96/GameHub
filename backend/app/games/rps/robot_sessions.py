@@ -10,7 +10,8 @@ from app.integrations.users_api import users_api
 
 MIN_TOTAL_SEC = 38.0
 MIN_GAP_SEC = 10.0
-TARGET_WINS = 3
+MATCH_ROUNDS = 3
+WINS_TO_CLINCH = MATCH_ROUNDS - 1
 ROUND_PICK_SEC = 5.0
 ROUND_REVEAL_SEC = 5.0
 
@@ -22,9 +23,11 @@ class RobotSession:
     last_play_mono: float
     player_wins: int = 0
     robot_wins: int = 0
+    rounds_played: int = 0
     rounds: list[dict] = field(default_factory=list)
     finished: bool = False
     player_won_match: bool = False
+    match_tie: bool = False
     reward_granted: bool = False
     phase: str = "picking"  # picking | revealing
     pick_deadline_mono: float = 0.0
@@ -37,6 +40,9 @@ class RobotSessionManager:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._by_id: dict[str, RobotSession] = {}
+
+    def _match_clinched(self, s: RobotSession) -> bool:
+        return max(s.player_wins, s.robot_wins) >= WINS_TO_CLINCH
 
     def _begin_pick(self, s: RobotSession) -> None:
         now = time.monotonic()
@@ -58,7 +64,10 @@ class RobotSessionManager:
             "last_round": s.last_round,
             "player_wins": s.player_wins,
             "robot_wins": s.robot_wins,
+            "round": s.rounds_played,
+            "total_rounds": MATCH_ROUNDS,
             "finished": s.finished,
+            "match_tie": s.match_tie,
         }
 
     def start(self, username: str) -> dict:
@@ -74,7 +83,7 @@ class RobotSessionManager:
             self._by_id[sid] = s
         return {
             "session_id": sid,
-            "target_wins": TARGET_WINS,
+            "total_rounds": MATCH_ROUNDS,
             "min_total_sec": MIN_TOTAL_SEC,
             "round_pick_sec": ROUND_PICK_SEC,
             "round_reveal_sec": ROUND_REVEAL_SEC,
@@ -142,27 +151,10 @@ class RobotSessionManager:
             "winner_side": winner_side,
             "forfeit": forfeit or player_move is None,
         }
+        s.rounds_played += 1
         s.phase = "revealing"
         s.reveal_deadline_mono = now + ROUND_REVEAL_SEC
         s.pending_move = None
-
-        reward: dict = {"granted": False}
-        if s.player_wins >= TARGET_WINS or s.robot_wins >= TARGET_WINS:
-            s.finished = True
-            s.player_won_match = s.player_wins >= TARGET_WINS
-            elapsed = now - s.started_mono
-            if s.player_won_match:
-                if elapsed >= MIN_TOTAL_SEC and not s.reward_granted:
-                    new_bal = users_api.increment_diamonds(s.username, 1)
-                    s.reward_granted = new_bal is not None
-                    reward = {"granted": s.reward_granted, "diamonds": new_bal}
-                else:
-                    reward = {
-                        "granted": False,
-                        "wait_seconds": max(0.0, round(MIN_TOTAL_SEC - elapsed, 2)),
-                    }
-            else:
-                reward = {"granted": False, "lost": True}
 
         return {
             "ok": True,
@@ -174,6 +166,50 @@ class RobotSessionManager:
             "robot_wins": s.robot_wins,
             "finished": s.finished,
             "player_won_match": s.player_won_match,
+            "match_tie": s.match_tie,
+            **self._session_payload(s),
+        }
+
+    def _finish_match_locked(self, s: RobotSession) -> dict:
+        now = time.monotonic()
+        if s.finished:
+            return {"ok": True, **self._session_payload(s)}
+        s.finished = True
+        if s.player_wins > s.robot_wins:
+            s.player_won_match = True
+            s.match_tie = False
+        elif s.robot_wins > s.player_wins:
+            s.player_won_match = False
+            s.match_tie = False
+        else:
+            s.player_won_match = False
+            s.match_tie = True
+        s.last_round = {
+            **(s.last_round or {}),
+            "match_over": True,
+            "match_tie": s.match_tie,
+        }
+        reward: dict = {"granted": False}
+        if s.match_tie:
+            reward = {"tie": True}
+        elif s.player_won_match:
+            elapsed = now - s.started_mono
+            if elapsed >= MIN_TOTAL_SEC and not s.reward_granted:
+                new_bal = users_api.increment_diamonds(s.username, 1)
+                s.reward_granted = new_bal is not None
+                reward = {"granted": s.reward_granted, "diamonds": new_bal}
+            else:
+                reward = {
+                    "granted": False,
+                    "wait_seconds": max(0.0, round(MIN_TOTAL_SEC - elapsed, 2)),
+                }
+        else:
+            reward = {"lost": True}
+        return {
+            "ok": True,
+            "finished": True,
+            "player_won_match": s.player_won_match,
+            "match_tie": s.match_tie,
             "reward": reward,
             **self._session_payload(s),
         }
@@ -201,6 +237,8 @@ class RobotSessionManager:
                 forfeit = s.pending_move is None
                 return self._resolve_round_locked(s, forfeit=forfeit)
             if s.phase == "revealing" and now >= s.reveal_deadline_mono:
+                if s.rounds_played >= MATCH_ROUNDS or self._match_clinched(s):
+                    return self._finish_match_locked(s)
                 if not s.finished:
                     self._begin_pick(s)
                 return {"ok": True, "advanced": True, **self._session_payload(s)}
@@ -235,8 +273,11 @@ class RobotSessionManager:
             if s.phase == "picking" and now >= s.pick_deadline_mono:
                 tick_out = self._resolve_round_locked(s, forfeit=s.pending_move is None)
             elif s.phase == "revealing" and now >= s.reveal_deadline_mono and not s.finished:
-                self._begin_pick(s)
-                tick_out = {"ok": True, "advanced": True, **self._session_payload(s)}
+                if s.rounds_played >= MATCH_ROUNDS or self._match_clinched(s):
+                    tick_out = self._finish_match_locked(s)
+                else:
+                    self._begin_pick(s)
+                    tick_out = {"ok": True, "advanced": True, **self._session_payload(s)}
             base = {"ok": True, **self._session_payload(s)}
             if tick_out:
                 base["tick"] = tick_out

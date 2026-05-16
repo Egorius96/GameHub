@@ -17,11 +17,11 @@ def default_catalog_other_data() -> dict:
             },
             settings.rps_game_key: {
                 "title": "Камень ножницы бумага",
-                "description": "Классическая игра (в разработке).",
+                "description": "Классическая игра: робот, онлайн-комнаты и ставки алмазами.",
                 "game_author": None,
                 "creator_avatar_url": None,
                 "creator_message": "",
-                "status": "coming_soon",
+                "status": "released",
             },
             settings.tamagochi_game_key: {
                 "title": "Тамагочи World",
@@ -176,6 +176,11 @@ def get_catalog_games() -> dict:
         umeta = games.get(key)
         if isinstance(umeta, dict):
             base.update(umeta)
+        if key == settings.rps_game_key:
+            desc = str(base.get("description") or "")
+            if "в разработке" in desc.lower() or base.get("status") == "coming_soon":
+                base["description"] = str(dmeta.get("description") or desc)
+                base["status"] = str(dmeta.get("status") or "released")
         _merge_creator_keys_into_game_dict(key, base)
         base["author_password_configured"] = bool(author_env_password_for_game(key))
         out[key] = base

@@ -5,6 +5,7 @@ import { playSfx } from '../../audio/sound'
 const props = defineProps<{
   show: boolean
   won: boolean
+  tie?: boolean
   playerScore: number
   opponentScore: number
   opponentLabel?: string
@@ -26,7 +27,7 @@ watch(
       window.requestAnimationFrame(() => {
         entered.value = true
       })
-      playSfx(props.won ? 'diamond' : 'button')
+      playSfx(props.tie ? 'button' : props.won ? 'diamond' : 'button')
     } else {
       entered.value = false
     }
@@ -50,11 +51,23 @@ function onExit() {
     <Transition name="rps-end-fade">
       <div v-if="show" class="rps-end-overlay" role="dialog" aria-modal="true" aria-labelledby="rps-end-title">
         <div class="rps-end-backdrop" @click="onExit" />
-        <div class="rps-end-card" :class="{ 'rps-end-card--win': won, 'rps-end-card--lose': !won, 'rps-end-card--in': entered }">
+        <div
+          class="rps-end-card"
+          :class="{
+            'rps-end-card--win': won && !tie,
+            'rps-end-card--lose': !won && !tie,
+            'rps-end-card--tie': tie,
+            'rps-end-card--in': entered,
+          }"
+        >
           <div class="rps-end-glow" aria-hidden="true" />
-          <p class="rps-end-eyebrow">Итог матча</p>
-          <h2 id="rps-end-title" class="rps-end-title" :class="won ? 'rps-end-title--win' : 'rps-end-title--lose'">
-            {{ won ? 'Победа!' : 'Проигрыш' }}
+          <p class="rps-end-eyebrow">Итог матча (3 раунда)</p>
+          <h2
+            id="rps-end-title"
+            class="rps-end-title"
+            :class="tie ? 'rps-end-title--tie' : won ? 'rps-end-title--win' : 'rps-end-title--lose'"
+          >
+            {{ tie ? 'Ничья!' : won ? 'Победа!' : 'Проигрыш' }}
           </h2>
           <p class="rps-end-score">
             Вы <strong>{{ playerScore }}</strong>
@@ -62,7 +75,8 @@ function onExit() {
             <strong>{{ opponentScore }}</strong>
             {{ opponentLabel || 'соперник' }}
           </p>
-          <p v-if="won && rewardPending" class="rps-end-hint">Алмаз скоро появится в копилке…</p>
+          <p v-if="tie" class="rps-end-hint">Равный счёт побед — матч завершён вничью.</p>
+          <p v-else-if="won && rewardPending" class="rps-end-hint">Алмаз скоро появится в копилке…</p>
           <p v-else-if="won" class="rps-end-hint">+1 алмаз в копилку GameHub</p>
           <p v-else class="rps-end-hint">В следующий раз повезёт!</p>
           <div class="rps-end-actions">
@@ -117,6 +131,18 @@ function onExit() {
 }
 .rps-end-card--lose {
   border-color: rgba(239, 83, 80, 0.4);
+}
+.rps-end-card--tie {
+  border-color: rgba(144, 202, 249, 0.45);
+}
+.rps-end-card--tie .rps-end-glow {
+  background: radial-gradient(ellipse, rgba(100, 181, 246, 0.45), transparent 70%);
+}
+.rps-end-title--tie {
+  background: linear-gradient(135deg, #90caf9, #42a5f5, #e3f2fd);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 .rps-end-glow {
   position: absolute;

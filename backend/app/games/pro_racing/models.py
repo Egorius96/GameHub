@@ -20,6 +20,8 @@ class PlayerState:
     y: float
     lives: int = 3
     direction: Direction = "stop"
+    move_x: int = 0
+    move_y: int = 0
 
 
 @dataclass

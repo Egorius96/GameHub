@@ -102,7 +102,15 @@ def _baseline_awake_sleepiness_rate() -> float:
 
 
 def _sleep_recovery_rate() -> float:
-    return 100.0 / (float(TUNING.energy_recovery_hours_full) * 3600.0)
+    return (
+        100.0
+        / (float(TUNING.energy_recovery_hours_full) * 3600.0)
+        * float(TUNING.sleep_recovery_mult)
+    )
+
+
+def _hp_recovery_rate_sleeping() -> float:
+    return float(TUNING.hp_up_per_sec_sleeping) * float(TUNING.sleep_recovery_mult)
 
 
 def _awake_sleepiness_rate(hp: float, hunger: float, mood: float, activity: str) -> float:
@@ -238,7 +246,7 @@ def sync_pet_state(
         if sleepiness >= TUNING.sleepiness_crit:
             hp -= TUNING.hp_down_per_sec_on_crit_sleep * dt
     if sleeping and hunger < TUNING.hunger_crit:
-        hp += TUNING.hp_up_per_sec_sleeping * dt
+        hp += _hp_recovery_rate_sleeping() * dt
 
     # clamps
     if offline:

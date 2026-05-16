@@ -11,7 +11,8 @@ from app.games.rps.logic import normalize_move, outcome
 from app.integrations.users_api import users_api
 
 NUM_ROOMS = 5
-ONLINE_TARGET_WINS = 5
+MATCH_ROUNDS = 3
+WINS_TO_CLINCH = MATCH_ROUNDS - 1  # 2:0 — третий раунд не нужен
 PICK_SEC = 5.0
 REVEAL_SEC = 5.0
 
@@ -98,7 +99,7 @@ class RpsRoom:
             "pot": self.pot,
             "stakes": dict(self.stakes),
             "wins": {k: int(self.wins.get(k, 0)) for k in self.order},
-            "target_wins": ONLINE_TARGET_WINS,
+            "total_rounds": MATCH_ROUNDS,
             "round": self.round_idx,
             "round_phase": self.round_phase if self.phase == "playing" else None,
             "your_choice": your_choice,
@@ -240,6 +241,12 @@ class RpsRoom:
         self.last_round = None
         return None
 
+    def _match_clinched_locked(self) -> bool:
+        if len(self.order) != 2:
+            return False
+        wins = [int(self.wins.get(u, 0)) for u in self.order]
+        return max(wins) >= WINS_TO_CLINCH
+
     def _begin_pick_locked(self) -> None:
         if len(self.order) != 2:
             return
@@ -292,24 +299,39 @@ class RpsRoom:
             "forfeit_a": forfeit_a or ca is None,
             "forfeit_b": forfeit_b or cb is None,
         }
+        self.round_phase = "reveal"
+        self.round_deadline_mono = None
+        self.reveal_deadline_mono = time.monotonic() + REVEAL_SEC
 
-        done = (
-            winner_name is not None
-            and int(self.wins.get(winner_name, 0)) >= ONLINE_TARGET_WINS
-        )
-        if done and winner_name:
-            users_api.adjust_diamonds(winner_name, self.pot)
-            lr = {
-                **(self.last_round or {}),
-                "match_over": True,
-                "match_winner": winner_name,
-            }
-            self._reset_match_to_betting()
-            self.last_round = lr
+    async def _finish_match_locked(self) -> None:
+        if len(self.order) != 2:
+            return
+        a, b = self.order[0], self.order[1]
+        wa = int(self.wins.get(a, 0))
+        wb = int(self.wins.get(b, 0))
+        winner_name: str | None
+        if wa > wb:
+            winner_name = a
+        elif wb > wa:
+            winner_name = b
         else:
-            self.round_phase = "reveal"
-            self.round_deadline_mono = None
-            self.reveal_deadline_mono = time.monotonic() + REVEAL_SEC
+            winner_name = None
+        lr = {
+            **(self.last_round or {}),
+            "match_over": True,
+            "match_winner": winner_name,
+            "match_tie": winner_name is None,
+            "final_wins": {a: wa, b: wb},
+        }
+        if winner_name:
+            users_api.adjust_diamonds(winner_name, self.pot)
+        else:
+            for u in self.order:
+                stake = int(self.stakes.get(u, 0))
+                if stake > 0:
+                    users_api.adjust_diamonds(u, stake)
+        self._reset_match_to_betting()
+        self.last_round = lr
 
     async def handle_chat(self, username: str, text: str) -> None:
         t = str(text or "").strip()[:400]
@@ -383,8 +405,11 @@ class RpsRoom:
                 await self.send_all_states()
                 return
             if self.round_phase == "reveal" and self.reveal_deadline_mono and now >= self.reveal_deadline_mono:
-                self.round_idx += 1
-                self._begin_pick_locked()
+                if self.round_idx >= MATCH_ROUNDS or self._match_clinched_locked():
+                    await self._finish_match_locked()
+                else:
+                    self.round_idx += 1
+                    self._begin_pick_locked()
                 await self.send_all_states()
 
 

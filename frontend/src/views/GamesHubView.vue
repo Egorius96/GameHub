@@ -61,28 +61,15 @@ onBeforeUnmount(() => {
 const diamonds = computed(() => Number((auth.otherData as any).diamonds ?? 0))
 const gamesProgress = computed(() => ((auth.otherData as any).games ?? {}) as Record<string, any>)
 const proRacingTime = computed(() => Number(gamesProgress.value?.misha_pro_racing_game?.playtime ?? 0))
-const proRacingAuthor = computed(() => String(catalog.value?.misha_pro_racing_game?.game_author ?? 'неизвестен') || 'неизвестен')
-const rpsAuthor = computed(() => String(catalog.value?.rps_game?.game_author ?? 'неизвестен') || 'неизвестен')
-const tamagochiAuthor = computed(() => String(catalog.value?.tamagochi_world_game?.game_author ?? 'неизвестен') || 'неизвестен')
 const proRacingOnline = computed(() => Number(presence.value.by_game?.misha_pro_racing_game ?? 0))
 const rpsOnline = computed(() => Number(presence.value.by_game?.rps_game ?? 0))
 const tamagochiOnline = computed(() => Number(presence.value.by_game?.tamagochi_world_game ?? 0))
 const tamagochiTime = computed(() => Number(gamesProgress.value?.tamagochi_world_game?.playtime ?? 0))
-const teamTerritoryAuthor = computed(() => String(catalog.value?.team_territory?.game_author ?? 'неизвестен') || 'неизвестен')
 const teamTerritoryOnline = computed(() => Number(presence.value.by_game?.team_territory ?? 0))
 const teamTerritoryTime = computed(() => Number(gamesProgress.value?.team_territory?.playtime ?? 0))
-const mc2dAuthor = computed(() => String(catalog.value?.minecraft_2d_online?.game_author ?? 'неизвестен') || 'неизвестен')
 const mc2dOnline = computed(() => Number(presence.value.by_game?.minecraft_2d_online ?? 0))
 const mc2dTime = computed(() => Number(gamesProgress.value?.minecraft_2d_online?.playtime ?? 0))
 
-function hubAuthorLabel(key: string): string {
-  if (key === 'misha_pro_racing_game') return proRacingAuthor.value
-  if (key === 'rps_game') return rpsAuthor.value
-  if (key === 'tamagochi_world_game') return tamagochiAuthor.value
-  if (key === 'team_territory') return teamTerritoryAuthor.value
-  if (key === 'minecraft_2d_online') return mc2dAuthor.value
-  return 'неизвестен'
-}
 function hubOnlineCount(key: string): number {
   if (key === 'misha_pro_racing_game') return proRacingOnline.value
   if (key === 'rps_game') return rpsOnline.value
@@ -595,7 +582,6 @@ async function confirmDeleteAccount() {
                   <span v-if="g.key === 'minecraft_2d_online' && MINECRAFT_2D_COMING_SOON" class="hub-game-wip-badge">В разработке</span>
                 </div>
                 <div class="hub-game-meta">
-                  <span style="opacity:0.9;">Автор: {{ hubAuthorLabel(g.key) }}</span>
                   <span style="opacity:0.85;">В сети: {{ hubOnlineCount(g.key) }}</span>
                   <span v-if="g.key === 'misha_pro_racing_game'" style="opacity:0.75;">В игре: {{ fmtPlaytime(proRacingTime) }}</span>
                   <span v-if="g.key === 'tamagochi_world_game'" style="opacity:0.75;">В игре: {{ fmtPlaytime(tamagochiTime) }}</span>

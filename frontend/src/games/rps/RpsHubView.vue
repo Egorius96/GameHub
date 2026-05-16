@@ -8,6 +8,9 @@ import RpsCardBoard, { type RpsMove, type RpsRoundVerdict } from './RpsCardBoard
 import RpsMatchEndModal from './RpsMatchEndModal.vue'
 
 const GAME_KEY = 'rps_game'
+const MATCH_ROUNDS = 3
+const PICK_TOTAL_SEC = 5
+const REVEAL_TOTAL_SEC = 5
 const router = useRouter()
 const auth = useAuthStore()
 
@@ -33,7 +36,9 @@ const robotRevealSec = ref(0)
 const robotOppMove = ref<RpsMove | null>(null)
 const robotHighlight = ref<'player' | 'opponent' | 'tie' | null>(null)
 const showRobotEndModal = ref(false)
+const robotMatchTie = ref(false)
 const robotRewardPending = ref(false)
+const robotRoundsPlayed = ref(0)
 const diamondHudRef = ref<HTMLElement | null>(null)
 type DiamondFlight = { id: string; x0: number; y0: number; x1: number; y1: number }
 const diamondFlights = ref<DiamondFlight[]>([])
@@ -90,8 +95,11 @@ const onlineOppMove = computed(() => (roomState.value?.opponent_choice as RpsMov
 const onlineBoardRevealed = computed(
   () => roomState.value?.phase === 'playing' && onlineRoundPhase.value === 'reveal'
 )
-const onlinePickSec = computed(() => Math.ceil(Number(roomState.value?.pick_seconds_left ?? 0)))
-const onlineRevealSec = computed(() => Math.ceil(Number(roomState.value?.reveal_seconds_left ?? 0)))
+const onlinePickSecLocal = ref(0)
+const onlineRevealSecLocal = ref(0)
+let onlinePickEndsAt = 0
+let onlineRevealEndsAt = 0
+let onlineHudTimer: number | null = null
 const onlineOppMoves = computed(() => oppMovesMap(onlineOppMove.value))
 const onlineBoardDisabled = computed(
   () => roomState.value?.phase !== 'playing' || onlineRoundPhase.value !== 'pick'
@@ -116,37 +124,131 @@ const onlineOpponentLabel = computed(() => {
   const you = roomState.value?.you as string
   return (roomState.value?.players as string[])?.find((p: string) => p !== you) ?? 'Соперник'
 })
+const onlineMatchTie = computed(() => {
+  const lr = roomState.value?.last_round
+  return !!(lr?.match_over && lr.match_tie)
+})
 const onlineMatchWon = computed(() => {
   const lr = roomState.value?.last_round
-  if (!lr?.match_over) return false
+  if (!lr?.match_over || lr.match_tie) return false
   return lr.match_winner === roomState.value?.you
 })
 const onlineEndScores = computed(() => {
   const you = roomState.value?.you as string
-  const w = roomState.value?.wins as Record<string, number> | undefined
+  const lr = roomState.value?.last_round
+  const fw = lr?.final_wins as Record<string, number> | undefined
+  const w = (fw ?? roomState.value?.wins) as Record<string, number> | undefined
   if (!you || !w) return { player: 0, opponent: 0 }
   const opp = onlineOpponentLabel.value
   return { player: Number(w[you] ?? 0), opponent: Number(w[opp] ?? 0) }
 })
+const onlineRoundLabel = computed(() => {
+  const r = Number(roomState.value?.round ?? 1)
+  return `Раунд ${Math.min(Math.max(1, r), MATCH_ROUNDS)}/${MATCH_ROUNDS}`
+})
+const robotRoundLabel = computed(() => {
+  const r = Math.min(robotRoundsPlayed.value + (robotPhase.value === 'picking' ? 1 : 0), MATCH_ROUNDS)
+  return `Раунд ${Math.max(1, r)}/${MATCH_ROUNDS}`
+})
 
-const PICK_TOTAL_SEC = 5
+let robotPickEndsAt = 0
+let robotRevealEndsAt = 0
+
+function syncRobotDeadlines(src: Record<string, any>) {
+  const now = Date.now()
+  if (src.phase === 'picking') {
+    robotPickEndsAt = now + Number(src.pick_seconds_left ?? 0) * 1000
+    robotRevealEndsAt = 0
+  } else if (src.phase === 'revealing') {
+    robotRevealEndsAt = now + Number(src.reveal_seconds_left ?? 0) * 1000
+    robotPickEndsAt = 0
+  } else {
+    robotPickEndsAt = 0
+    robotRevealEndsAt = 0
+  }
+  updateRobotHudClock()
+}
+
+function updateRobotHudClock() {
+  const now = Date.now()
+  robotPickSec.value =
+    robotPickEndsAt > now ? Math.max(0, Math.ceil((robotPickEndsAt - now) / 1000)) : 0
+  robotRevealSec.value =
+    robotRevealEndsAt > now ? Math.max(0, Math.ceil((robotRevealEndsAt - now) / 1000)) : 0
+}
+
+function syncOnlineDeadlines(payload: Record<string, any>) {
+  const now = Date.now()
+  if (payload.phase === 'playing' && payload.round_phase === 'pick') {
+    onlinePickEndsAt = now + Number(payload.pick_seconds_left ?? 0) * 1000
+    onlineRevealEndsAt = 0
+  } else if (payload.phase === 'playing' && payload.round_phase === 'reveal') {
+    onlineRevealEndsAt = now + Number(payload.reveal_seconds_left ?? 0) * 1000
+    onlinePickEndsAt = 0
+  } else {
+    onlinePickEndsAt = 0
+    onlineRevealEndsAt = 0
+  }
+  updateOnlineHudClock()
+}
+
+function updateOnlineHudClock() {
+  const now = Date.now()
+  onlinePickSecLocal.value =
+    onlinePickEndsAt > now ? Math.max(0, Math.ceil((onlinePickEndsAt - now) / 1000)) : 0
+  onlineRevealSecLocal.value =
+    onlineRevealEndsAt > now ? Math.max(0, Math.ceil((onlineRevealEndsAt - now) / 1000)) : 0
+}
+
+function startOnlineHudTimer() {
+  if (onlineHudTimer != null) return
+  onlineHudTimer = window.setInterval(updateOnlineHudClock, 100)
+}
+
+function stopOnlineHudTimer() {
+  if (onlineHudTimer != null) {
+    window.clearInterval(onlineHudTimer)
+    onlineHudTimer = null
+  }
+}
+
+function applyOnlineState(payload: Record<string, any>) {
+  roomState.value = payload
+  syncOnlineDeadlines(payload)
+}
 
 const robotTimerSec = computed(() =>
   robotPhase.value === 'picking' ? robotPickSec.value : robotRevealSec.value
 )
-const robotTimerLabel = computed(() => (robotPhase.value === 'picking' ? 'Выбор' : 'Итог раунда'))
-const robotTimerProgress = computed(() =>
-  Math.max(0, Math.min(100, (robotTimerSec.value / PICK_TOTAL_SEC) * 100))
+const robotTimerLabel = computed(() =>
+  robotPhase.value === 'picking' ? 'Выбор' : 'Итог раунда'
 )
+const robotTimerTotalMs = computed(() =>
+  (robotPhase.value === 'picking' ? PICK_TOTAL_SEC : REVEAL_TOTAL_SEC) * 1000
+)
+const robotTimerProgress = computed(() => {
+  const now = Date.now()
+  const end = robotPhase.value === 'picking' ? robotPickEndsAt : robotRevealEndsAt
+  if (end <= now) return 0
+  const total = robotTimerTotalMs.value
+  return Math.max(0, Math.min(100, ((end - now) / total) * 100))
+})
 const robotTimerUrgent = computed(() => robotTimerSec.value > 0 && robotTimerSec.value <= 3)
 
 const onlineTimerSec = computed(() =>
-  onlineRoundPhase.value === 'pick' ? onlinePickSec.value : onlineRevealSec.value
+  onlineRoundPhase.value === 'pick' ? onlinePickSecLocal.value : onlineRevealSecLocal.value
 )
 const onlineTimerLabel = computed(() => (onlineRoundPhase.value === 'pick' ? 'Выбор' : 'Итог раунда'))
-const onlineTimerProgress = computed(() =>
-  Math.max(0, Math.min(100, (onlineTimerSec.value / PICK_TOTAL_SEC) * 100))
+const onlineTimerTotalMs = computed(() =>
+  (onlineRoundPhase.value === 'pick' ? PICK_TOTAL_SEC : REVEAL_TOTAL_SEC) * 1000
 )
+const onlineTimerProgress = computed(() => {
+  const now = Date.now()
+  const end = onlineRoundPhase.value === 'pick' ? onlinePickEndsAt : onlineRevealEndsAt
+  if (end <= now) return 0
+  const total = onlineTimerTotalMs.value
+  return Math.max(0, Math.min(100, ((end - now) / total) * 100))
+})
 const onlineTimerUrgent = computed(() => onlineTimerSec.value > 0 && onlineTimerSec.value <= 3)
 
 async function loadRooms() {
@@ -223,14 +325,18 @@ function resetRobotUi() {
   robotHighlight.value = null
   robotRoundLogKey = ''
   robotRewardLogged = false
+  robotMatchTie.value = false
+  robotRoundsPlayed.value = 0
+  robotPickEndsAt = 0
+  robotRevealEndsAt = 0
 }
 
 function applyRobotState(data: Record<string, any>) {
   const tick = data.tick as Record<string, any> | undefined
   const src = tick ? { ...data, ...tick } : data
   robotPhase.value = (src.phase as 'picking' | 'revealing') || 'picking'
-  robotPickSec.value = Math.max(0, Math.ceil(Number(src.pick_seconds_left ?? 0)))
-  robotRevealSec.value = Math.max(0, Math.ceil(Number(src.reveal_seconds_left ?? 0)))
+  robotRoundsPlayed.value = Number(src.round ?? robotRoundsPlayed.value)
+  syncRobotDeadlines(src)
   if (src.pending_move) robotSelected.value = src.pending_move as RpsMove
   playerWins.value = Number(src.player_wins ?? playerWins.value)
   robotWins.value = Number(src.robot_wins ?? robotWins.value)
@@ -252,7 +358,8 @@ function applyRobotState(data: Record<string, any>) {
   }
   if (src.finished && !robotRewardLogged) {
     robotRewardLogged = true
-    robotWonMatch.value = !!src.player_won_match
+    robotMatchTie.value = !!(src.match_tie ?? src.last_round?.match_tie)
+    robotWonMatch.value = !!src.player_won_match && !robotMatchTie.value
     const reward = src.reward as Record<string, any> | undefined
     robotRewardPending.value = Boolean(
       robotWonMatch.value && reward && !reward.granted && Number(reward.wait_seconds ?? 0) > 0
@@ -261,6 +368,7 @@ function applyRobotState(data: Record<string, any>) {
     if (robotWonMatch.value) {
       window.setTimeout(() => launchDiamondFlyFromCenter(), 500)
     }
+    if (reward?.tie || robotMatchTie.value) robotLog.value.push('Ничья по итогам 3 раундов.')
     if (reward?.lost) robotLog.value.push('Партия проиграна.')
     if (reward?.granted) {
       void auth.refreshProfile()
@@ -296,7 +404,10 @@ async function pollRobotState() {
 
 function startRobotPoll() {
   stopRobotPoll()
-  robotPollTimer = window.setInterval(() => void pollRobotState(), 300)
+  robotPollTimer = window.setInterval(() => {
+    updateRobotHudClock()
+    void pollRobotState()
+  }, 100)
 }
 
 async function startRobotMatch() {
@@ -315,7 +426,7 @@ async function startRobotMatch() {
       return
     }
     robotSession.value = String(data.session_id ?? '')
-    robotLog.value = ['Игра до 3 побед. Удачи!']
+    robotLog.value = ['До 3 раундов. При счёте 2:0 матч завершается досрочно. Удачи!']
     applyRobotState(data)
     startRobotPoll()
   } catch {
@@ -390,6 +501,7 @@ function enterOnlineRoom(id: number) {
   showOnlineEndModal.value = false
   mode.value = 'online_room'
   connectWs(id)
+  startOnlineHudTimer()
 }
 
 function connectWs(roomId: number) {
@@ -401,7 +513,7 @@ function connectWs(roomId: number) {
       const msg = JSON.parse(ev.data)
       if (msg.type === 'room.state') {
         onlineError.value = ''
-        roomState.value = msg.payload
+        applyOnlineState(msg.payload ?? {})
         if (msg.payload?.last_round?.match_over) {
           handleOnlineMatchEnd()
         }
@@ -428,6 +540,7 @@ function connectWs(roomId: number) {
 }
 
 function disconnectWs() {
+  stopOnlineHudTimer()
   if (ws) {
     try {
       ws.close()
@@ -435,6 +548,8 @@ function disconnectWs() {
     ws = null
   }
   roomState.value = null
+  onlinePickEndsAt = 0
+  onlineRevealEndsAt = 0
 }
 
 function sendWs(obj: object) {
@@ -523,6 +638,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   stopPresencePing()
   stopRobotPoll()
+  stopOnlineHudTimer()
   if (roomsTimer) window.clearInterval(roomsTimer)
   if (onlineDiamondRefreshTimer) window.clearTimeout(onlineDiamondRefreshTimer)
   disconnectWs()
@@ -552,9 +668,9 @@ watch(
         <p class="rps-hint">Классические правила. Выберите режим.</p>
         <div class="rps-menu-grid">
           <button type="button" class="btn rps-big" @click="openRobot">Игра с роботом</button>
-          <p class="rps-card-note">До 3 побед. Победитель получает 1 алмаз.</p>
+          <p class="rps-card-note">До 3 раундов; при 2:0 третий не играется. Победитель — 1 алмаз.</p>
           <button type="button" class="btn rps-big" @click="openOnlineLobby">Онлайн — комнаты</button>
-          <p class="rps-card-note">5 комнат, ставки 1–5 алмазов, до 5 побед. Победитель забирает обе ставки.</p>
+          <p class="rps-card-note">5 комнат, ставки 1–5. До 3 раундов, при 2:0 — досрочный финиш.</p>
         </div>
       </div>
 
@@ -575,7 +691,7 @@ watch(
                 'rps-hud-timer--reveal': robotPhase === 'revealing',
               }"
             >
-              <span class="rps-hud-timer-label">{{ robotTimerLabel }}</span>
+              <span class="rps-hud-timer-label">{{ robotRoundLabel }} · {{ robotTimerLabel }}</span>
               <div class="rps-hud-timer-ring" aria-hidden="true">
                 <svg viewBox="0 0 120 120" class="rps-hud-timer-svg">
                   <circle class="rps-hud-timer-track" cx="60" cy="60" r="52" />
@@ -662,7 +778,7 @@ watch(
                   'rps-hud-timer--reveal': onlineRoundPhase === 'reveal',
                 }"
               >
-                <span class="rps-hud-timer-label">{{ onlineTimerLabel }}</span>
+                <span class="rps-hud-timer-label">{{ onlineRoundLabel }} · {{ onlineTimerLabel }}</span>
                 <div class="rps-hud-timer-ring" aria-hidden="true">
                   <svg viewBox="0 0 120 120" class="rps-hud-timer-svg">
                     <circle class="rps-hud-timer-track" cx="60" cy="60" r="52" />
@@ -720,6 +836,7 @@ watch(
     <RpsMatchEndModal
       :show="showRobotEndModal"
       :won="robotWonMatch"
+      :tie="robotMatchTie"
       :player-score="playerWins"
       :opponent-score="robotWins"
       opponent-label="робот"
@@ -730,6 +847,7 @@ watch(
     <RpsMatchEndModal
       :show="showOnlineEndModal"
       :won="onlineMatchWon"
+      :tie="onlineMatchTie"
       :player-score="onlineEndScores.player"
       :opponent-score="onlineEndScores.opponent"
       :opponent-label="onlineOpponentLabel"
@@ -1000,7 +1118,7 @@ watch(
   stroke-width: 8;
   stroke-linecap: round;
   stroke-dasharray: 326.73;
-  transition: stroke-dashoffset 0.35s linear;
+  transition: stroke-dashoffset 0.12s linear;
 }
 .rps-hud-timer-num {
   position: absolute;
