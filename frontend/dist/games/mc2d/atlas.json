@@ -1,0 +1,14 @@
+{
+  "cell": 32,
+  "cols": 8,
+  "tiles": [
+    "air",
+    "sand",
+    "dirt",
+    "stone",
+    "iron",
+    "diamond",
+    "grass",
+    "tree"
+  ]
+}

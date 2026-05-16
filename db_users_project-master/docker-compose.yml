@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "7998:8000"
+    volumes:
+      - ./backend/data:/app/data
+      - sqlite_data:/app/
+    deploy:
+      resources:
+        limits:
+          memory: 150M
+        reservations:
+          memory: 100M
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    deploy:
+      resources:
+        limits:
+          memory: 50M
+        reservations:
+          memory: 30M
+    environment:
+      - NODE_ENV=production
+      - NODE_OPTIONS="--max-old-space-size=150"
+
+volumes:
+  sqlite_data:
+    name: db_project_sqlite_data 

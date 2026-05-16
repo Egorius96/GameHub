@@ -1,0 +1,81 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: gamehub-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-gamehub}
+      POSTGRES_USER: ${DB_USER:-gamehub}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-gamehub}
+    ports:
+      - "${DB_HOST_PORT:-5432}:5432"
+    volumes:
+      - gamehub_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-gamehub} -d ${DB_NAME:-gamehub}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    container_name: gamehub-backend
+    restart: unless-stopped
+    # Подхватывает .env рядом с compose (в т.ч. *_AUTHOR для «Я автор» на хабе, включая MC2D_AUTHOR).
+    env_file:
+      - .env
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-gamehub}
+      DB_USER: ${DB_USER:-gamehub}
+      DB_PASSWORD: ${DB_PASSWORD:-gamehub}
+      ADMINDB_PASSWORD: ${ADMINDB_PASSWORD:-}
+      DEFAULT_AVATAR_URL: ${DEFAULT_AVATAR_URL:-/app/pictures/default_avatar.jpg}
+      # Явная подстановка из .env при `docker compose up` (дублирует env_file, но надёжно для CI).
+      PRO_RACING_AUTHOR: ${PRO_RACING_AUTHOR:-}
+      RPS_AUTHOR: ${RPS_AUTHOR:-}
+      TAMAGOTCHI_AUTHOR: ${TAMAGOTCHI_AUTHOR:-}
+      TEAM_TERRITORY_AUTHOR: ${TEAM_TERRITORY_AUTHOR:-}
+      MC2D_AUTHOR: ${MC2D_AUTHOR:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      db:
+        condition: service_healthy
+    # Загруженные файлы (не слой образа): переживают rebuild контейнера.
+    volumes:
+      - gamehub_avatars:/app/app/static/avatars
+      - gamehub_game_creators:/app/app/static/game_creators
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE: ${VITE_API_BASE:-/api}
+    container_name: gamehub-frontend
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: gamehub-nginx
+    restart: unless-stopped
+    ports:
+      # 8080 на хосте → 80 в контейнере (если :80 занят — см. README)
+      - "${HTTP_HOST_PORT:-8080}:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+
+volumes:
+  gamehub_pgdata:
+  gamehub_avatars:
+  gamehub_game_creators:

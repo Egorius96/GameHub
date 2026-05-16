@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Users Data</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+
+        body {
+            background-color: #f5f5f5;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            color: #333;
+        }
+
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .save-btn {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background-color 0.2s;
+        }
+
+        .save-btn:hover {
+            background-color: #218838;
+        }
+
+        .delete-btn {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background-color 0.2s;
+        }
+
+        .delete-btn:hover {
+            background-color: #c82333;
+        }
+
+        .create-btn {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background-color 0.2s;
+        }
+
+        .create-btn:hover {
+            background-color: #0056b3;
+        }
+
+        .new-record-row input {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+
+        .new-record-row input:focus {
+            outline: none;
+            border-color: #007bff;
+        }
+
+        .new-record-row {
+            background-color: #f8f9fa;
+        }
+
+        .editable {
+            padding: 0.5rem;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            min-width: 200px;
+            display: block;
+        }
+
+        .editable:focus {
+            outline: none;
+            border-color: #007bff;
+            background-color: #fff;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 1rem;
+            }
+
+            .container {
+                padding: 1rem;
+            }
+
+            th, td {
+                padding: 0.5rem;
+            }
+        }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+        <h1>Users Data</h1>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Username</th>
+                    <th>Password</th>
+                    <th>Project</th>
+                    <th>Other Data</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- User data will be populated here -->
+            </tbody>
+            <tfoot>
+                <tr class="new-record-row">
+                    <td>New</td>
+                    <td>
+                        <input type="text" id="new-username" placeholder="Enter username">
+                    </td>
+                    <td>
+                        <input type="text" id="new-password" placeholder="Enter password">
+                    </td>
+                    <td>
+                        <input type="text" id="new-project" placeholder="Enter project">
+                    </td>
+                    <td>
+                        <input type="text" id="new-other-data" placeholder="Enter JSON data" value="{}">
+                    </td>
+                    <td class="button-group">
+                        <button class="create-btn" onclick="createUser()">Create</button>
+                    </td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+
+    <script>
+        const API_URL = 'http://94.159.100.3:7998';
+
+        // Function to load users
+        function loadUsers() {
+            fetch(`${API_URL}/users`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(users => {
+                    const tbody = document.querySelector('tbody');
+                    tbody.innerHTML = users.map(user => `
+                        <tr data-id="${user.id}">
+                            <td>${user.id}</td>
+                            <td>
+                                <div 
+                                    class="editable" 
+                                    contenteditable="true" 
+                                    data-field="username"
+                                    data-original="${user.username}"
+                                >${user.username}</div>
+                            </td>
+                            <td>
+                                <div 
+                                    class="editable" 
+                                    contenteditable="true"
+                                    data-field="password"
+                                    data-original="${user.password}"
+                                >${user.password}</div>
+                            </td>
+                            <td>
+                                <div 
+                                    class="editable" 
+                                    contenteditable="true"
+                                    data-field="project"
+                                    data-original="${user.project || ''}"
+                                >${user.project || ''}</div>
+                            </td>
+                            <td>
+                                <div 
+                                    class="editable" 
+                                    contenteditable="true"
+                                    data-field="other_data"
+                                    data-original='${JSON.stringify(user.other_data || {})}'
+                                >${JSON.stringify(user.other_data || {}, null, 2)}</div>
+                            </td>
+                            <td class="button-group">
+                                <button class="save-btn" onclick="saveUser('${user.id}', this)">Save</button>
+                                <button class="delete-btn" onclick="deleteUser('${user.id}', this)">Delete</button>
+                            </td>
+                        </tr>
+                    `).join('');
+                })
+                .catch(error => {
+                    console.error('Error loading users:', error);
+                    alert('Failed to load users. Please try again.');
+                });
+        }
+
+        // Load users when page loads
+        document.addEventListener('DOMContentLoaded', loadUsers);
+
+        function createUser() {
+            const username = document.getElementById('new-username').value.trim();
+            const password = document.getElementById('new-password').value.trim();
+            const project = document.getElementById('new-project').value.trim();
+            const otherDataStr = document.getElementById('new-other-data').value.trim();
+            
+            if (!username) {
+                alert('Please enter a username');
+                return;
+            }
+
+            if (!password) {
+                alert('Please enter a password');
+                return;
+            }
+
+            if (!project) {
+                alert('Please enter a project');
+                return;
+            }
+
+            let otherData;
+            try {
+                otherData = JSON.parse(otherDataStr);
+            } catch (e) {
+                alert('Please enter valid JSON data');
+                return;
+            }
+
+            const data = {
+                username: username,
+                password: password,
+                project: project,
+                other_data: otherData
+            };
+
+            fetch(`${API_URL}/users`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => {
+                        throw new Error(err.detail || 'Network response was not ok');
+                    });
+                }
+                return response.json();
+            })
+            .then(() => {
+                // Clear input fields
+                document.getElementById('new-username').value = '';
+                document.getElementById('new-password').value = '';
+                document.getElementById('new-project').value = '';
+                document.getElementById('new-other-data').value = '{}';
+                // Reload users list
+                loadUsers();
+                alert('User created successfully!');
+            })
+            .catch(error => {
+                console.error('Error creating user:', error);
+                alert(error.message || 'Failed to create user. Please try again.');
+            });
+        }
+
+        function saveUser(id, button) {
+            const row = button.closest('tr');
+            const editableElements = row.querySelectorAll('.editable');
+            
+            // Get current user data
+            const currentUsername = row.querySelector('[data-field="username"]').getAttribute('data-original');
+            const currentPassword = row.querySelector('[data-field="password"]').getAttribute('data-original');
+            
+            // Get updated data
+            const updates = {};
+            for (const element of editableElements) {
+                const field = element.dataset.field;
+                const newValue = element.textContent.trim();
+                
+                if (field === 'other_data') {
+                    try {
+                        updates.other_data = JSON.parse(newValue);
+                    } catch (e) {
+                        alert('Please enter valid JSON data');
+                        element.textContent = element.dataset.original;
+                        return;
+                    }
+                } else {
+                    updates[field] = newValue;
+                }
+            }
+
+            const requestData = {
+                user_auth: {
+                    username: currentUsername,
+                    password: currentPassword
+                },
+                user_update: updates
+            };
+
+            fetch(`${API_URL}/users/update`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestData)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => {
+                        throw new Error(err.detail || 'Network response was not ok');
+                    });
+                }
+                return response.json();
+            })
+            .then(updatedUser => {
+                // Update the original data after successful save
+                for (const element of editableElements) {
+                    const field = element.dataset.field;
+                    if (field === 'other_data') {
+                        element.dataset.original = JSON.stringify(updatedUser.other_data || {});
+                        element.textContent = JSON.stringify(updatedUser.other_data || {}, null, 2);
+                    } else if (field === 'password') {
+                        // For password, keep the value that was entered by the user
+                        const newValue = element.textContent.trim();
+                        element.dataset.original = newValue;
+                        element.textContent = newValue;
+                    } else {
+                        element.dataset.original = updatedUser[field] || '';
+                        element.textContent = updatedUser[field] || '';
+                    }
+                }
+                alert('Changes saved successfully!');
+            })
+            .catch(error => {
+                console.error('Error updating user:', error);
+                // Restore original content on error
+                for (const element of editableElements) {
+                    const field = element.dataset.field;
+                    if (field === 'other_data') {
+                        element.textContent = JSON.stringify(
+                            JSON.parse(element.dataset.original),
+                            null,
+                            2
+                        );
+                    } else {
+                        element.textContent = element.dataset.original;
+                    }
+                }
+                alert(error.message || 'Failed to update user. Please try again.');
+            });
+        }
+
+        function deleteUser(id, button) {
+            if (confirm('Are you sure you want to delete this user?')) {
+                const row = button.closest('tr');
+                const username = row.querySelector('[data-field="username"]').textContent;
+                const password = row.querySelector('[data-field="password"]').textContent;
+
+                const requestData = {
+                    username: username,
+                    password: password
+                };
+
+                fetch(`${API_URL}/users/delete`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestData)
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    loadUsers();
+                })
+                .catch(error => {
+                    console.error('Error deleting user:', error);
+                    alert('Failed to delete user. Please try again.');
+                });
+            }
+        }
+    </script>
+  </body>
+</html> 
