@@ -120,8 +120,15 @@ function showToast(message: string, variant: 'info' | 'error' = 'info') {
   }, 4200)
 }
 
+const CREATOR_EMPTY_MESSAGE = 'Автор пока не добавил текст.'
+
 const openCreatorKey = ref<string | null>(null)
 const creatorMediaVersion = ref(0)
+
+function creatorMessageForDisplay(raw: unknown): string | null {
+  const t = String(raw ?? '').trim()
+  return t.length ? t : null
+}
 
 function toggleCreatorPanel(gameKey: string) {
   playSfx('button')
@@ -162,7 +169,7 @@ function openIamAuthor(gameKey: string) {
   }
   authorGameKey.value = gameKey
   authorPassword.value = ''
-  authorMessage.value = String(catalog.value[gameKey]?.creator_message ?? '')
+  authorMessage.value = creatorMessageForDisplay(catalog.value[gameKey]?.creator_message) ?? ''
   authorModalError.value = ''
   showAuthorModal.value = true
 }
@@ -173,6 +180,89 @@ function closeAuthorModal() {
     authorPassword.value = ''
     authorModalError.value = ''
     if (authorFileInputRef.value) authorFileInputRef.value.value = ''
+  }
+}
+
+function applyAuthorCatalogPatch(
+  gk: string,
+  data: { creator_message?: string; creator_avatar_url?: string | null }
+) {
+  if (!gk || !catalog.value[gk]) return
+  const patch: Record<string, unknown> = {}
+  if (data.creator_message !== undefined) {
+    patch.creator_message = String(data.creator_message ?? '').trim()
+  }
+  if ('creator_avatar_url' in data) {
+    patch.creator_avatar_url = data.creator_avatar_url ?? null
+  }
+  catalog.value[gk] = { ...catalog.value[gk], ...patch }
+}
+
+function handleAuthorApiError(resp: Response, data: { detail?: unknown }) {
+  if (resp.status === 413) {
+    authorModalError.value =
+      'Фото слишком много весит (лимит 5 МБ до сжатия) или на шлюзе слишком маленький лимит тела запроса — перезапустите nginx с актуальным конфигом.'
+    return
+  }
+  const { code, message } = parseCreatorDetail(data)
+  if (code === 'author_password_not_configured') {
+    showToast(message || 'В переменных окружения не задан пароль автора для этой игры.', 'error')
+    closeAuthorModal()
+  } else if (code === 'wrong_author_password') {
+    showToast(message || 'Пароль неверный.', 'error')
+  } else if (code === 'creator_file_too_large') {
+    authorModalError.value = message || 'Фото слишком много весит: максимум 5 МБ до сжатия на сервере.'
+  } else {
+    authorModalError.value =
+      typeof data.detail === 'string' ? data.detail : message || 'Не удалось выполнить действие'
+  }
+}
+
+async function resetAuthorBlock() {
+  authorModalError.value = ''
+  const pwd = authorPassword.value.trim()
+  if (!pwd) {
+    authorModalError.value = 'Введите пароль автора'
+    return
+  }
+  if (!window.confirm('Удалить весь текст и фото в блоке «от автора» для этой игры?')) return
+  playSfx('button')
+  authorSubmitting.value = true
+  try {
+    const fd = new FormData()
+    fd.append('game_key', authorGameKey.value)
+    fd.append('password', pwd)
+    const resp = await fetch('/api/game-creators/reset', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${auth.token}` },
+      body: fd,
+    })
+    const data = (await resp.json().catch(() => ({}))) as {
+      detail?: unknown
+      creator_message?: string
+      creator_avatar_url?: string | null
+    }
+    if (!resp.ok) {
+      authorSubmitting.value = false
+      handleAuthorApiError(resp, data)
+      return
+    }
+    showToast('Блок автора сброшен', 'info')
+    creatorMediaVersion.value = Date.now()
+    applyAuthorCatalogPatch(authorGameKey.value, {
+      creator_message: '',
+      creator_avatar_url: null,
+    })
+    authorMessage.value = ''
+    if (authorFileInputRef.value) authorFileInputRef.value.value = ''
+    await reloadGamesCatalog()
+    showAuthorModal.value = false
+    authorPassword.value = ''
+    authorModalError.value = ''
+  } catch {
+    authorModalError.value = 'Сеть: ошибка запроса'
+  } finally {
+    authorSubmitting.value = false
   }
 }
 
@@ -188,8 +278,9 @@ async function submitAuthorBlock() {
     authorModalError.value = 'Фото слишком много весит: максимум 5 МБ до сжатия на сервере.'
     return
   }
-  const initialMsg = String(catalog.value[authorGameKey.value]?.creator_message ?? '')
-  const msgChanged = authorMessage.value !== initialMsg
+  const initialMsg = creatorMessageForDisplay(catalog.value[authorGameKey.value]?.creator_message) ?? ''
+  const nextMsg = authorMessage.value.trim()
+  const msgChanged = nextMsg !== initialMsg
   if (!file && !msgChanged) {
     authorModalError.value = 'Измените текст или выберите фото'
     return
@@ -200,7 +291,7 @@ async function submitAuthorBlock() {
     fd.append('game_key', authorGameKey.value)
     fd.append('password', pwd)
     if (msgChanged) {
-      fd.append('message', authorMessage.value)
+      fd.append('message', nextMsg)
     }
     if (file) {
       fd.append('file', file)
@@ -210,34 +301,19 @@ async function submitAuthorBlock() {
       headers: { Authorization: `Bearer ${auth.token}` },
       body: fd,
     })
-    const data = (await resp.json().catch(() => ({}))) as { detail?: unknown }
+    const data = (await resp.json().catch(() => ({}))) as {
+      detail?: unknown
+      creator_message?: string
+      creator_avatar_url?: string
+    }
     if (!resp.ok) {
       authorSubmitting.value = false
-      if (resp.status === 413) {
-        authorModalError.value =
-          'Фото слишком много весит (лимит 5 МБ до сжатия) или на шлюзе слишком маленький лимит тела запроса — перезапустите nginx с актуальным конфигом.'
-        return
-      }
-      const { code, message } = parseCreatorDetail(data)
-      if (code === 'author_password_not_configured') {
-        showToast(message || 'В переменных окружения не задан пароль автора для этой игры.', 'error')
-      } else if (code === 'wrong_author_password') {
-        showToast(message || 'Пароль неверный.', 'error')
-      } else if (code === 'creator_file_too_large') {
-        authorModalError.value = message || 'Фото слишком много весит: максимум 5 МБ до сжатия на сервере.'
-      } else {
-        authorModalError.value =
-          typeof data.detail === 'string'
-            ? data.detail
-            : message || 'Не удалось сохранить'
-      }
-      if (code === 'author_password_not_configured') {
-        closeAuthorModal()
-      }
+      handleAuthorApiError(resp, data)
       return
     }
     showToast('Сохранено', 'info')
     creatorMediaVersion.value = Date.now()
+    applyAuthorCatalogPatch(authorGameKey.value, data)
     await reloadGamesCatalog()
     showAuthorModal.value = false
     authorPassword.value = ''
@@ -561,7 +637,7 @@ async function confirmDeleteAccount() {
                     class="btn hub-like-btn hub-side-action"
                     :disabled="!!likes.my_vote && likes.my_vote !== g.key"
                     @click="likeGame(g.key)"
-                    :title="likes.my_vote ? 'Можно лайкнуть только одну игру в день' : 'Поставить лайк за игру сегодня'"
+                    :title="likes.my_vote ? 'Сегодня вы уже лайкнули другую игру' : 'Поставить лайк (1 раз в день, в счётчике — за всё время)'"
                   >
                     👍 {{ likes.counts[g.key] ?? 0 }}
                   </button>
@@ -607,10 +683,10 @@ async function confirmDeleteAccount() {
                   <span v-else class="hub-creator-avatar-ph">?</span>
                 </div>
                 <div class="hub-creator-text-wrap">
-                  <p v-if="String(catalog[g.key]?.creator_message ?? '').trim()" class="hub-creator-text">
-                    {{ catalog[g.key]?.creator_message }}
+                  <p v-if="creatorMessageForDisplay(catalog[g.key]?.creator_message)" class="hub-creator-text">
+                    {{ creatorMessageForDisplay(catalog[g.key]?.creator_message) }}
                   </p>
-                  <p v-else class="hub-creator-text hub-creator-text--muted">Автор пока не добавил текст.</p>
+                  <p v-else class="hub-creator-text hub-creator-text--muted">{{ CREATOR_EMPTY_MESSAGE }}</p>
                 </div>
               </div>
               <button type="button" class="btn hub-creator-author-btn" @click="openIamAuthor(g.key)">Я автор</button>
@@ -694,7 +770,7 @@ async function confirmDeleteAccount() {
               class="delete-modal-input author-modal-textarea"
               rows="5"
               maxlength="2000"
-              placeholder="До 2000 символов"
+              :placeholder="CREATOR_EMPTY_MESSAGE"
             />
           </label>
           <label class="delete-modal-label">
@@ -707,6 +783,14 @@ async function confirmDeleteAccount() {
             />
           </label>
           <p v-if="authorModalError" class="delete-modal-err">{{ authorModalError }}</p>
+          <button
+            type="button"
+            class="btn btn-modal-delete author-modal-reset"
+            :disabled="authorSubmitting || !authorPassword.trim()"
+            @click="resetAuthorBlock"
+          >
+            {{ authorSubmitting ? '…' : 'Сбросить текст и фото' }}
+          </button>
           <div class="delete-modal-actions">
             <button type="button" class="btn btn-modal-cancel" :disabled="authorSubmitting" @click="closeAuthorModal">
               Отмена
@@ -1144,6 +1228,10 @@ async function confirmDeleteAccount() {
   cursor: default;
 }
 
+.author-modal-reset {
+  width: 100%;
+  margin-bottom: 12px;
+}
 .author-modal-textarea {
   min-height: 120px;
   resize: vertical;

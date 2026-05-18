@@ -67,6 +67,13 @@ def author_env_password_for_game(game_key: str) -> str | None:
     return s if s else None
 
 
+def normalize_creator_message(value: object) -> str:
+    """Пустой или только пробелы — как «автор не заполнил»."""
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
 def _merge_creator_keys_into_game_dict(game_key: str, meta: dict) -> bool:
     defaults = (default_catalog_other_data().get("games") or {}).get(game_key)
     if not isinstance(defaults, dict):
@@ -182,6 +189,7 @@ def get_catalog_games() -> dict:
                 base["description"] = str(dmeta.get("description") or desc)
                 base["status"] = str(dmeta.get("status") or "released")
         _merge_creator_keys_into_game_dict(key, base)
+        base["creator_message"] = normalize_creator_message(base.get("creator_message"))
         base["author_password_configured"] = bool(author_env_password_for_game(key))
         out[key] = base
     for key, umeta in games.items():
@@ -189,6 +197,7 @@ def get_catalog_games() -> dict:
             continue
         base = dict(umeta)
         _merge_creator_keys_into_game_dict(key, base)
+        base["creator_message"] = normalize_creator_message(base.get("creator_message"))
         base["author_password_configured"] = bool(author_env_password_for_game(key))
         out[key] = base
     return out

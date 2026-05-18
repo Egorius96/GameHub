@@ -46,7 +46,9 @@ const showOnlineEndModal = ref(false)
 let robotPollTimer: number | null = null
 let robotRoundLogKey = ''
 let robotRewardLogged = false
-let onlineEndHandled = false
+/** Ключ завершённого матча — не показывать модалку снова после «Начать заново» */
+let dismissedOnlineMatchKey = ''
+let robotEndDismissed = false
 
 let ws: WebSocket | null = null
 let onlineDiamondRefreshTimer: number | null = null
@@ -212,9 +214,27 @@ function stopOnlineHudTimer() {
   }
 }
 
+function onlineMatchEndKey(payload: Record<string, any>): string {
+  const lr = payload?.last_round as Record<string, any> | undefined
+  if (!lr?.match_over) return ''
+  const fw = lr.final_wins as Record<string, number> | undefined
+  return `${lr.match_winner ?? 'tie'}:${JSON.stringify(fw ?? {})}`
+}
+
 function applyOnlineState(payload: Record<string, any>) {
   roomState.value = payload
   syncOnlineDeadlines(payload)
+  maybeShowOnlineEndModal(payload)
+}
+
+function maybeShowOnlineEndModal(payload: Record<string, any>) {
+  const key = onlineMatchEndKey(payload)
+  if (!key || key === dismissedOnlineMatchKey) return
+  showOnlineEndModal.value = true
+  const lr = payload.last_round as Record<string, any>
+  const you = payload.you as string
+  const won = !!(lr.match_winner === you && !lr.match_tie)
+  if (won) window.setTimeout(() => launchDiamondFlyFromCenter(), 500)
 }
 
 const robotTimerSec = computed(() =>
@@ -329,6 +349,7 @@ function resetRobotUi() {
   robotRoundsPlayed.value = 0
   robotPickEndsAt = 0
   robotRevealEndsAt = 0
+  robotEndDismissed = false
 }
 
 function applyRobotState(data: Record<string, any>) {
@@ -364,7 +385,7 @@ function applyRobotState(data: Record<string, any>) {
     robotRewardPending.value = Boolean(
       robotWonMatch.value && reward && !reward.granted && Number(reward.wait_seconds ?? 0) > 0
     )
-    showRobotEndModal.value = true
+    if (!robotEndDismissed) showRobotEndModal.value = true
     if (robotWonMatch.value) {
       window.setTimeout(() => launchDiamondFlyFromCenter(), 500)
     }
@@ -497,7 +518,7 @@ function enterOnlineRoom(id: number) {
     roomsTimer = null
   }
   onlineRoomId.value = id
-  onlineEndHandled = false
+  dismissedOnlineMatchKey = ''
   showOnlineEndModal.value = false
   mode.value = 'online_room'
   connectWs(id)
@@ -514,9 +535,6 @@ function connectWs(roomId: number) {
       if (msg.type === 'room.state') {
         onlineError.value = ''
         applyOnlineState(msg.payload ?? {})
-        if (msg.payload?.last_round?.match_over) {
-          handleOnlineMatchEnd()
-        }
         if (msg.payload?.last_round?.match_over || msg.payload?.last_round?.kind === 'forfeit') {
           if (onlineDiamondRefreshTimer) window.clearTimeout(onlineDiamondRefreshTimer)
           onlineDiamondRefreshTimer = window.setTimeout(() => {
@@ -597,34 +615,28 @@ function launchDiamondFlyFromCenter() {
   })
 }
 
-function handleOnlineMatchEnd() {
-  if (!roomState.value?.last_round?.match_over || onlineEndHandled) return
-  onlineEndHandled = true
-  showOnlineEndModal.value = true
-  if (onlineMatchWon.value) {
-    window.setTimeout(() => launchDiamondFlyFromCenter(), 500)
-  }
-}
-
 function robotRestart() {
+  robotEndDismissed = false
   showRobotEndModal.value = false
   resetRobotUi()
   void startRobotMatch()
 }
 
 function robotExitGame() {
+  robotEndDismissed = true
   showRobotEndModal.value = false
   resetRobotUi()
 }
 
 function onlineRestart() {
+  if (roomState.value) dismissedOnlineMatchKey = onlineMatchEndKey(roomState.value)
   showOnlineEndModal.value = false
-  onlineEndHandled = false
+  if (roomState.value?.phase === 'betting') sendBetReady()
 }
 
 function onlineExitGame() {
+  if (roomState.value) dismissedOnlineMatchKey = onlineMatchEndKey(roomState.value)
   showOnlineEndModal.value = false
-  onlineEndHandled = false
   disconnectWs()
   mode.value = 'online_lobby'
   void loadRooms()

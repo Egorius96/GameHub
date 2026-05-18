@@ -124,11 +124,14 @@ onMounted(() => {
   sceneEl.value?.focus()
   window.addEventListener('keydown', keyHandler)
   window.addEventListener('keyup', keyUpHandler)
+  laneLastTs = 0
+  laneRafId = requestAnimationFrame(tickLaneScroll)
 })
 
 startHeartbeat(auth.token, 'misha_pro_racing_game')
 startPresencePing(auth.token, 'misha_pro_racing_game')
 onBeforeUnmount(() => {
+  if (laneRafId) cancelAnimationFrame(laneRafId)
   window.removeEventListener('keydown', keyHandler)
   window.removeEventListener('keyup', keyUpHandler)
   if (secondsPulseTimer) window.clearTimeout(secondsPulseTimer)
@@ -211,10 +214,24 @@ const displayKmh = computed(() =>
   Math.round(BASE_KMH * (rockSpeed.value / BASE_ROCK_SPEED))
 )
 
-const laneDashDurationSec = computed(() => {
-  const scrollPx = LANE_SCROLL_BASE_PX_PER_SEC * (rockSpeed.value / BASE_ROCK_SPEED)
-  return LANE_CYCLE_PX / Math.max(scrollPx, 1)
-})
+/** Смещение полос: rAF вместо CSS-animation — иначе при каждом тике WS сбрасывается анимация */
+const laneOffsetPx = ref(0)
+let laneRafId = 0
+let laneLastTs = 0
+
+function laneScrollPxPerSec(): number {
+  return LANE_SCROLL_BASE_PX_PER_SEC * (rockSpeed.value / BASE_ROCK_SPEED)
+}
+
+function tickLaneScroll(ts: number) {
+  if (!laneLastTs) laneLastTs = ts
+  const dt = Math.min((ts - laneLastTs) / 1000, 0.05)
+  laneLastTs = ts
+  if (state.value && !showGameOver.value) {
+    laneOffsetPx.value = (laneOffsetPx.value + laneScrollPxPerSec() * dt) % LANE_CYCLE_PX
+  }
+  laneRafId = requestAnimationFrame(tickLaneScroll)
+}
 
 const hudLine = computed(() => {
   if (!state.value) return ''
@@ -320,7 +337,7 @@ function backToMenu() {
               'pr-scene--paused': showGameOver && !!state,
               'pr-scene--waiting': !state,
             }"
-            :style="state ? { '--lane-dash-dur': `${laneDashDurationSec}s`, '--pr-kmh': displayKmh } : undefined"
+            :style="state ? { '--pr-kmh': displayKmh } : undefined"
             role="application"
             aria-label="Игровое поле"
           >
@@ -339,7 +356,10 @@ function backToMenu() {
             <div class="pr-road" aria-hidden="true">
               <div class="pr-road-vignette" />
               <div class="pr-lane-strip">
-                <div class="pr-lane-dashes" />
+                <div
+                  class="pr-lane-dashes"
+                  :style="{ transform: `translateX(${-laneOffsetPx}px)` }"
+                />
               </div>
             </div>
 
@@ -705,19 +725,7 @@ function backToMenu() {
   );
   background-size: 230px 100%;
   will-change: transform;
-  animation: pr-lane-scroll var(--lane-dash-dur, 3.83s) linear infinite;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
-}
-@keyframes pr-lane-scroll {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-230px);
-  }
-}
-.pr-scene--paused .pr-lane-dashes {
-  animation-play-state: paused;
 }
 .pr-layer-ui {
   position: absolute;

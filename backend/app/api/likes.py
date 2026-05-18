@@ -39,21 +39,38 @@ class VoteRequest(BaseModel):
     game_key: str = Field(min_length=1, max_length=64)
 
 
+def _total_like_counts(db: Session) -> dict[str, int]:
+    """Суммарные лайки по играм за всю историю."""
+    rows = (
+        db.query(GameLike.game_key, func.count(GameLike.id))
+        .group_by(GameLike.game_key)
+        .all()
+    )
+    return {str(k): int(c) for (k, c) in rows}
+
+
+def _gamehub_user_id(db: Session, username: str) -> int | None:
+    gh = db.query(GameHubUser).filter(GameHubUser.username == username).first()
+    return int(gh.id) if gh is not None else None
+
+
+def _my_vote_today(db: Session, user_id: int | None, day: date) -> str | None:
+    if user_id is None:
+        return None
+    row = db.query(GameLike).filter(GameLike.user_id == user_id, GameLike.day == day).first()
+    return row.game_key if row else None
+
+
 @router.get("/summary")
 def summary(authorization: str = Header(default=""), db: Session = Depends(get_db)) -> dict:
     _, session = _session_from_auth(authorization)
     day = _today()
-    # counts
-    rows = (
-        db.query(GameLike.game_key, func.count(GameLike.id))
-        .filter(GameLike.day == day)
-        .group_by(GameLike.game_key)
-        .all()
-    )
-    counts = {str(k): int(c) for (k, c) in rows}
-    # my vote today
-    my = db.query(GameLike).filter(GameLike.user_id == int(session.user.get("id", 0))).filter(GameLike.day == day).first()
-    return {"day": str(day), "counts": counts, "my_vote": (my.game_key if my else None)}
+    user_id = _gamehub_user_id(db, str(session.username))
+    return {
+        "day": str(day),
+        "counts": _total_like_counts(db),
+        "my_vote": _my_vote_today(db, user_id, day),
+    }
 
 
 @router.post("/vote")
@@ -100,13 +117,10 @@ def vote(req: Request, payload: VoteRequest, authorization: str = Header(default
         db.query(GameHubUser).filter(GameHubUser.id.in_(ids)).update({GameHubUser.suspicious: True}, synchronize_session=False)
         db.commit()
 
-    # return updated counts
-    rows = (
-        db.query(GameLike.game_key, func.count(GameLike.id))
-        .filter(GameLike.day == day)
-        .group_by(GameLike.game_key)
-        .all()
-    )
-    counts = {str(k): int(c) for (k, c) in rows}
-    return {"ok": True, "day": str(day), "counts": counts, "my_vote": payload.game_key}
+    return {
+        "ok": True,
+        "day": str(day),
+        "counts": _total_like_counts(db),
+        "my_vote": payload.game_key,
+    }
 

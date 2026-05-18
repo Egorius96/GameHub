@@ -93,7 +93,7 @@ function onExit() {
 .rps-end-overlay {
   position: fixed;
   inset: 0;
-  z-index: 200;
+  z-index: 10050;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -108,6 +108,7 @@ function onExit() {
 .rps-end-card {
   position: relative;
   z-index: 1;
+  pointer-events: auto;
   width: min(400px, 100%);
   padding: 28px 24px 24px;
   border-radius: 24px;
