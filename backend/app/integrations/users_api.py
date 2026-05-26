@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.reserved_usernames import is_reserved_username
 from app.db.models import GameHubUser, WarningHistory
 from app.db.session import _session_factory
 from app.services.ban_state import clear_expired_temp_ban, is_login_blocked, temp_ban_remaining_seconds, utcnow
@@ -78,6 +79,8 @@ def default_gamehub_other_data() -> dict[str, Any]:
 
 def attempt_insert_gamehub_user(db: Session, username: str, password: str) -> tuple[bool, GameHubUser | None]:
     """Создать пользователя в текущей сессии (savepoint). False — ник уже занят."""
+    if is_reserved_username(username):
+        return False, None
     try:
         with db.begin_nested():
             u = GameHubUser(

@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
+from app.core.reserved_usernames import is_reserved_username
 from app.core.security import create_access_token
 from app.core.session import UserSession, sessions
 from app.core.gameshub import ensure_gameshub_schema
@@ -46,6 +47,14 @@ def sign_in(payload: AuthRequest) -> AuthResponse:
         sessions[token] = UserSession(username="admindb", password=payload.password, user=user)
         presence.touch("admindb", None)
         return AuthResponse(access_token=token, username="admindb", other_data=user["other_data"])
+
+    if payload.username == "database":
+        if payload.password != "database":
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+        token = create_access_token("database", role="database")
+        user = {"username": "database", "password": payload.password, "other_data": {"role": "database"}}
+        sessions[token] = UserSession(username="database", password=payload.password, user=user)
+        return AuthResponse(access_token=token, username="database", other_data=user["other_data"])
 
     user = users_api.auth(payload.username, payload.password)
     if user.get("error"):
@@ -135,6 +144,14 @@ def register(payload: AuthRequest, request: Request, db: Session = Depends(get_d
             )
 
         uname = payload.username.strip()
+        if is_reserved_username(uname):
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "reserved_username",
+                    "message": "Имя пользователя зарезервировано системой (admindb, database).",
+                },
+            )
         ok, u = attempt_insert_gamehub_user(db, uname, payload.password)
         if not ok or u is None:
             db.rollback()

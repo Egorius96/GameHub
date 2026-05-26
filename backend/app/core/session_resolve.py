@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.core.gameshub import ensure_gameshub_schema
+from app.core.reserved_usernames import is_system_service_username
 from app.core.security import decode_access_token
 from app.core.session import UserSession, sessions
 from app.db.models import GameHubUser
@@ -15,7 +16,7 @@ def resolve_user_session(token: str) -> UserSession | None:
         return existing
 
     username = decode_access_token(token)
-    if not username or username == "admindb":
+    if not username or is_system_service_username(username):
         return None
 
     db = _session_factory()()

@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { playSfx } from '../audio/sound'
 import { ApiHttpError } from '../api/client'
 
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
 const username = ref('')
 const password = ref('')
@@ -17,6 +18,28 @@ const showBlockedHistoryPanel = ref(false)
 const regToastMsg = ref('')
 const regToastErr = ref(false)
 let regToastTimer: number | null = null
+
+const RESERVED_USERNAMES = new Set(['admindb', 'database'])
+
+function isReservedUsername(name: string): boolean {
+  return RESERVED_USERNAMES.has(name.trim().toLowerCase())
+}
+
+function loginRedirectPath(name: string): string {
+  const u = name.trim()
+  if (u === 'admindb') return '/admin'
+  if (u === 'database') return '/database'
+  return '/games'
+}
+
+function navigateAfterAuth(name: string) {
+  const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : ''
+  if (redirect.startsWith('/') && redirect !== '/' && name.trim() !== 'admindb' && name.trim() !== 'database') {
+    router.push(redirect)
+    return
+  }
+  router.push(loginRedirectPath(name))
+}
 
 function showRegToast(message: string, err = false) {
   regToastMsg.value = message
@@ -62,7 +85,7 @@ async function signIn() {
     blockedWarningsHistory.value = []
     showBlockedHistoryPanel.value = false
     await auth.signIn(username.value, password.value)
-    router.push(username.value.trim() === 'admindb' ? '/admin' : '/games')
+    navigateAfterAuth(username.value)
   } catch (e) {
     if (e instanceof ApiHttpError && e.status === 403) {
       const raw = (e.body as { detail?: unknown })?.detail
@@ -96,16 +119,30 @@ async function signIn() {
 }
 
 async function register() {
+  if (isReservedUsername(username.value)) {
+    showRegToast('Имя пользователя зарезервировано системой (admindb, database).', true)
+    return
+  }
   try {
     playSfx('button')
     error.value = ''
     blockedWarningsHistory.value = []
     showBlockedHistoryPanel.value = false
     await auth.register(username.value, password.value)
-    router.push('/games')
+    navigateAfterAuth(username.value)
   } catch (e) {
     if (e instanceof ApiHttpError && e.status === 400) {
       const raw = (e.body as { detail?: unknown })?.detail
+      if (raw && typeof raw === 'object' && (raw as { code?: string }).code === 'reserved_username') {
+        const msg = (raw as { message?: string }).message
+        showRegToast(
+          typeof msg === 'string' && msg.trim()
+            ? msg
+            : 'Имя пользователя зарезервировано системой (admindb, database).',
+          true,
+        )
+        return
+      }
       if (raw && typeof raw === 'object' && (raw as { code?: string }).code === 'registration_daily_limit') {
         const msg = (raw as { message?: string }).message
         showRegToast(

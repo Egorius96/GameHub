@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 
 from app.core.config import settings
+from app.core.reserved_usernames import is_reserved_username
 from app.core.security import decode_access_token_payload
 from datetime import date, datetime, timedelta, timezone
 
@@ -76,6 +77,21 @@ def _require_admin(authorization: str = Header(default="")) -> None:
     payload = decode_access_token_payload(token)
     if not payload or payload.get("sub") != "admindb" or payload.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Admin only")
+
+
+def _require_legacy_users_admin(authorization: str = Header(default="")) -> None:
+    """Доступ к таблице legacy users: полный админ или служебный вход database."""
+    token = authorization.replace("Bearer ", "")
+    payload = decode_access_token_payload(token)
+    if not payload:
+        raise HTTPException(status_code=403, detail="Admin only")
+    sub = payload.get("sub")
+    role = payload.get("role")
+    if sub == "admindb" and role == "admin":
+        return
+    if sub == "database" and role == "database":
+        return
+    raise HTTPException(status_code=403, detail="Admin only")
 
 
 @router.get("/tables")
@@ -638,7 +654,7 @@ def delete_gamehub_user(
 def list_legacy_users(
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
-    _: None = Depends(_require_admin),
+    _: None = Depends(_require_legacy_users_admin),
     db: Session = Depends(get_db),
 ) -> dict:
     rows = db.query(LegacyUser).offset(offset).limit(limit).all()
@@ -648,7 +664,7 @@ def list_legacy_users(
 @router.post("/users")
 def create_legacy_user(
     payload: dict[str, Any],
-    _: None = Depends(_require_admin),
+    _: None = Depends(_require_legacy_users_admin),
     db: Session = Depends(get_db),
 ) -> dict:
     username = str(payload.get("username") or "").strip()
@@ -657,6 +673,8 @@ def create_legacy_user(
     other_data = payload.get("other_data") if isinstance(payload.get("other_data"), dict) else {}
     if not username or not password or not project:
         raise HTTPException(status_code=400, detail="username, password, project required")
+    if is_reserved_username(username):
+        raise HTTPException(status_code=400, detail="Reserved username")
     u = LegacyUser(username=username, password=password, project=project, other_data=other_data)
     db.add(u)
     db.commit()
@@ -668,7 +686,7 @@ def create_legacy_user(
 def update_legacy_user(
     user_id: int,
     payload: dict[str, Any],
-    _: None = Depends(_require_admin),
+    _: None = Depends(_require_legacy_users_admin),
     db: Session = Depends(get_db),
 ) -> dict:
     u = db.query(LegacyUser).filter(LegacyUser.id == user_id).first()
@@ -687,7 +705,7 @@ def update_legacy_user(
 @router.delete("/users/{user_id}")
 def delete_legacy_user(
     user_id: int,
-    _: None = Depends(_require_admin),
+    _: None = Depends(_require_legacy_users_admin),
     db: Session = Depends(get_db),
 ) -> dict:
     u = db.query(LegacyUser).filter(LegacyUser.id == user_id).first()
