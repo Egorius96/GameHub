@@ -9,7 +9,7 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "block_tiles"
-OUT_DIR = ROOT / "frontend" / "public" / "games" / "mc2d"
+OUT_DIR = ROOT / "frontend" / "public" / "assets" / "games" / "mc2d"
 
 CELL = 32
 # Индекс = Tile enum (AIR..TREE)

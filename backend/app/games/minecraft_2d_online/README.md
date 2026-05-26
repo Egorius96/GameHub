@@ -32,4 +32,4 @@ WebSocket: `/ws/minecraft-2d-online?token=...`
 
 ## Графика (клиент)
 
-Статика: `frontend/public/games/mc2d/atlas.webp` (тайлы 32×32 в ряд по `Tile` id) и `player.webp`. Пересборка из папки с исходниками: `python3 scripts/build_mc2d_atlas.py` (корень репозитория).
+Статика: `frontend/public/assets/games/mc2d/atlas.webp` (тайлы 32×32 в ряд по `Tile` id) и `player.webp`. Пересборка из папки с исходниками: `python3 scripts/build_mc2d_atlas.py` (корень репозитория).

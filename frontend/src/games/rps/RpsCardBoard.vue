@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { GAME_ASSETS_BASE } from '../../config/gameAssets'
 
 export type RpsMove = 'rock' | 'paper' | 'scissors'
 export type RpsRoundVerdict = 'win' | 'lose' | 'tie' | null
@@ -38,12 +39,12 @@ const labels: Record<RpsMove, string> = {
 }
 
 const faces: Record<RpsMove, string> = {
-  rock: '/games/rps/rock.png',
-  paper: '/games/rps/paper.png',
-  scissors: '/games/rps/scissors.png',
+  rock: `${GAME_ASSETS_BASE}/rps/rock.png`,
+  paper: `${GAME_ASSETS_BASE}/rps/paper.png`,
+  scissors: `${GAME_ASSETS_BASE}/rps/scissors.png`,
 }
 
-const backSrc = '/games/rps/back_side.png'
+const backSrc = `${GAME_ASSETS_BASE}/rps/back_side.png`
 
 function onPick(move: RpsMove) {
   if (props.disabled) return

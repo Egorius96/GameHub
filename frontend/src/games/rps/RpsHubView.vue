@@ -970,7 +970,7 @@ watch(
   border-radius: 16px;
   background:
     linear-gradient(180deg, rgba(8, 12, 22, 0.72) 0%, rgba(8, 12, 22, 0.88) 100%),
-    url('/games/rps/rps_background.jpg') center / cover no-repeat;
+    url('/assets/games/rps/rps_background.jpg') center / cover no-repeat;
 }
 .rps-menu .rps-hint,
 .rps-menu .rps-card-note {

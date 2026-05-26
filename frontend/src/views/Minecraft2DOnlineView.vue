@@ -5,6 +5,7 @@ import { useAuthStore } from '../stores/auth'
 import { playSfx } from '../audio/sound'
 import { startPresencePing, stopPresencePing } from '../telemetry/presence'
 import { MINECRAFT_2D_COMING_SOON } from '../config/features'
+import { GAME_ASSETS_BASE } from '../config/gameAssets'
 
 const GAME_KEY = 'minecraft_2d_online'
 const router = useRouter()
@@ -63,16 +64,16 @@ atlasImg.onerror = () => {
 playerImg.onload = () => {
   playerLoaded = true
 }
-atlasImg.src = '/games/mc2d/atlas.webp'
-playerImg.src = '/games/mc2d/player.webp'
+atlasImg.src = `${GAME_ASSETS_BASE}/mc2d/atlas.webp`
+playerImg.src = `${GAME_ASSETS_BASE}/mc2d/player.webp`
 for (let i = 0; i < TREE_SPRITE_COUNT; i++) {
-  treeImgs[i].src = `/games/mc2d/trees/tree${i + 1}.png`
+  treeImgs[i].src = `${GAME_ASSETS_BASE}/mc2d/trees/tree${i + 1}.png`
 }
 const skyImg = new Image()
-skyImg.src = '/games/mc2d/sky.png'
+skyImg.src = `${GAME_ASSETS_BASE}/mc2d/sky.png`
 const houseImgs: HTMLImageElement[] = [
-  Object.assign(new Image(), { src: '/games/mc2d/houses/home1.png' }),
-  Object.assign(new Image(), { src: '/games/mc2d/houses/home2.png' }),
+  Object.assign(new Image(), { src: `${GAME_ASSETS_BASE}/mc2d/houses/home1.png` }),
+  Object.assign(new Image(), { src: `${GAME_ASSETS_BASE}/mc2d/houses/home2.png` }),
 ]
 
 /** Fallback, если атлас не загрузился. */
