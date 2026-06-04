@@ -24,6 +24,27 @@ class HeartbeatRequest(BaseModel):
     seconds: int = Field(ge=1, le=60)
 
 
+class PatchProfileRequest(BaseModel):
+    ui_lang: str | None = Field(default=None, max_length=8)
+
+
+@router.patch("")
+def patch_profile(payload: PatchProfileRequest, authorization: str = Header(default="")) -> dict:
+    token = authorization.replace("Bearer ", "")
+    session = sessions.get(token)
+    if session is None:
+        raise HTTPException(status_code=401, detail={"code": "unauthorized"})
+    other = ensure_gameshub_schema(session.user.get("other_data") or {})
+    if payload.ui_lang is not None:
+        lang = payload.ui_lang.strip().lower()
+        if lang not in ("en", "ru", "it", "es", "de"):
+            raise HTTPException(status_code=400, detail={"code": "invalid_ui_lang"})
+        other["ui_lang"] = lang
+    session.user["other_data"] = other
+    users_api.save_user(session.user)
+    return {"ok": True, "other_data": other}
+
+
 @router.get("")
 def get_profile(authorization: str = Header(default="")) -> dict:
     token = authorization.replace("Bearer ", "")

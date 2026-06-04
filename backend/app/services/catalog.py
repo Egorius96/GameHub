@@ -9,23 +9,23 @@ def default_catalog_other_data() -> dict:
         "games": {
             settings.pro_racing_game_key: {
                 "title": "Pro Racing",
-                "description": "Аркадные гонки с камнями, алмазами и улучшениями.",
+                "description_code": "catalog.proRacing.desc",
                 "game_author": None,
                 "creator_avatar_url": None,
                 "creator_message": "",
                 "status": "released",
             },
             settings.rps_game_key: {
-                "title": "Камень ножницы бумага",
-                "description": "Классическая игра: робот, онлайн-комнаты и ставки алмазами.",
+                "title": "Rock Paper Scissors",
+                "description_code": "catalog.rps.desc",
                 "game_author": None,
                 "creator_avatar_url": None,
                 "creator_message": "",
                 "status": "released",
             },
             settings.tamagochi_game_key: {
-                "title": "Тамагочи World",
-                "description": "Мир питомцев: кормите, играйте, укладывайте спать и наблюдайте за другими.",
+                "title": "Tamagochi World",
+                "description_code": "catalog.tamagochi.desc",
                 "game_author": None,
                 "creator_avatar_url": None,
                 "creator_message": "",
@@ -33,7 +33,7 @@ def default_catalog_other_data() -> dict:
             },
             settings.team_territory_game_key: {
                 "title": "Team Territory",
-                "description": "Закрасьте поле G×G быстрее соперников: тики, краска, Challenge и награды алмазами.",
+                "description_code": "catalog.teamTerritory.desc",
                 "game_author": None,
                 "creator_avatar_url": None,
                 "creator_message": "",
@@ -41,7 +41,7 @@ def default_catalog_other_data() -> dict:
             },
             settings.minecraft_2d_online_game_key: {
                 "title": "Minecraft 2D Online",
-                "description": "2D-копание, очередь в мир, пыль и обмен с алмазами GameHub.",
+                "description_code": "catalog.mc2d.desc",
                 "game_author": None,
                 "creator_avatar_url": None,
                 "creator_message": "",
@@ -183,11 +183,11 @@ def get_catalog_games() -> dict:
         umeta = games.get(key)
         if isinstance(umeta, dict):
             base.update(umeta)
-        if key == settings.rps_game_key:
-            desc = str(base.get("description") or "")
-            if "в разработке" in desc.lower() or base.get("status") == "coming_soon":
-                base["description"] = str(dmeta.get("description") or desc)
-                base["status"] = str(dmeta.get("status") or "released")
+        # Backward compatibility: old catalog stored localized 'description' as a string.
+        # We now expose only 'description_code' for frontend i18n.
+        if not base.get("description_code"):
+            base["description_code"] = str((dmeta or {}).get("description_code") or "")
+        base.pop("description", None)
         _merge_creator_keys_into_game_dict(key, base)
         base["creator_message"] = normalize_creator_message(base.get("creator_message"))
         base["author_password_configured"] = bool(author_env_password_for_game(key))

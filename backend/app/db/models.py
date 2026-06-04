@@ -207,5 +207,6 @@ class MessengerDiamondLedger(Base):
     recipient_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
     chat_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("messenger_chat.id", ondelete="SET NULL"), nullable=True)
     message_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("messenger_message.id", ondelete="SET NULL"), nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True, index=True)
 
 

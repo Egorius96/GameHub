@@ -1,0 +1,523 @@
+{
+  "common": {
+    "ok": "OK",
+    "cancel": "Cancelar",
+    "close": "Cerrar",
+    "back": "Atrás",
+    "loading": "Cargando…",
+    "networkError": "Error de red",
+    "saved": "Guardado",
+    "copied": "Copiado",
+    "yes": "Sí",
+    "no": "No"
+  },
+  "errors": {
+    "generic": "Algo salió mal",
+    "unauthorized": "No autorizado",
+    "insufficient_diamonds": "Diamantes insuficientes (se necesitan {required})",
+    "insufficient_coins": "Monedas insuficientes (se necesitan {required})",
+    "no_active_pet": "No hay mascota activa",
+    "need_food": "Compra comida para tu mascota en la tienda",
+    "action_failed": "Acción fallida",
+    "health_full": "Salud ya al máximo",
+    "unknown_item": "Objeto desconocido",
+    "food_for_required": "Selecciona el tipo de mascota para la comida",
+    "same_ip": "Transferencia bloqueada (misma IP)",
+    "invalid_recipient": "Destinatario inválido",
+    "transfer_failed": "Transferencia fallida"
+  },
+  "hub": {
+    "account": "Cuenta",
+    "nickname": "Apodo",
+    "diamonds": "Diamantes",
+    "online": "En línea",
+    "playersOnline": "Jugadores en línea",
+    "messenger": "Mensajero",
+    "logout": "Salir",
+    "deleteAccount": "Eliminar cuenta",
+    "games": "Juegos",
+    "language": "Idioma",
+    "tamagochiReminderCritical": "¡Tu Tamagochi está en estado crítico!",
+    "tamagochiReminderHungry": "Tu Tamagochi tiene hambre.",
+    "likesNetworkError": "Me gusta: error de red",
+    "creator": {
+      "toggleShow": "Autores",
+      "toggleHide": "Ocultar",
+      "empty": "El autor aún no ha añadido un mensaje.",
+      "iAmAuthor": "Soy el autor",
+      "modalTitle": "Ajustes del autor",
+      "password": "Contraseña del autor",
+      "message": "Mensaje",
+      "photo": "Foto",
+      "save": "Guardar",
+      "reset": "Restablecer",
+      "fileTooLarge": "La imagen es demasiado grande (máx. 5 MB antes de comprimir).",
+      "wrongPassword": "Contraseña incorrecta.",
+      "notConfigured": "La contraseña del autor no está configurada para este juego.",
+      "hint": "Introduce la contraseña de las variables de entorno de este juego. La foto se comprime al subirla como el avatar de la cuenta."
+    },
+    "avatar": {
+      "button": "Avatar",
+      "uploadError": "No se pudo subir el avatar"
+    },
+    "delete": {
+      "open": "Eliminar cuenta",
+      "title": "Eliminar cuenta",
+      "text": "Esta acción es irreversible. La cuenta se eliminará permanentemente.",
+      "confirm": "Eliminar",
+      "cancel": "Cancelar",
+      "networkError": "Red: fallo en la solicitud"
+    },
+    "status": {
+      "inDevelopment": "En desarrollo"
+    }
+  },
+  "login": {
+    "signIn": "Entrar",
+    "register": "Crear cuenta",
+    "username": "Usuario",
+    "password": "Contraseña",
+    "accountTitle": "Cuenta",
+    "usernamePlaceholder": "p. ej., misha",
+    "cornerAria": "Escuela de programación",
+    "blockedHistoryAria": "Historial de avisos",
+    "blockedHistoryEmpty": "No hay textos de avisos guardados en el historial.",
+    "timeLeft": {
+      "hms": "{h} h {m} min",
+      "ms": "{m} min {s} s",
+      "s": "{s} s"
+    },
+    "errors": {
+      "tempBan": "Cuenta bloqueada temporalmente. Podrás entrar a partir de: {end}. Queda aprox.: {left}.",
+      "blockedInfo": "Acceso bloqueado por infracciones (límite de avisos). Abajo está el historial de notificaciones de seguridad.",
+      "permanentBlocked": "La cuenta está bloqueada permanentemente. Contacta con un administrador.",
+      "signIn": "Error al iniciar sesión: revisa usuario y contraseña",
+      "reservedUsername": "El nombre de usuario está reservado por el sistema (admindb, database).",
+      "dailyLimit": "Se alcanzó el límite diario de registros: máx. 2 cuentas nuevas por día. Inténtalo mañana.",
+      "register": "Error de registro: el usuario está ocupado o el servidor no está disponible"
+    }
+  },
+  "messenger": {
+    "title": "Messenger",
+    "nav": { "hub": "Hub" },
+    "walletTitle": "Saldo de diamantes",
+    "secureHint": "Los mensajes se transmiten por un canal seguro.",
+    "groupFallback": "Grupo",
+    "groupBadge": "grupo",
+    "searchUserPlaceholder": "Buscar usuario…",
+    "messagePlaceholder": "Mensaje…",
+    "emptyThread": "Selecciona un chat a la izquierda o crea uno nuevo.",
+    "presence": { "online": "En línea", "offline": "Desconectado" },
+    "emoji": { "title": "Emoji", "insert": "Insertar {emoji}" },
+    "actions": {
+      "newChat": "Nuevo chat",
+      "group": "Grupo",
+      "diamonds": "Diamantes",
+      "leave": "Salir",
+      "send": "Enviar",
+      "write": "Escribir",
+      "delete": "Eliminar",
+      "accept": "Aceptar",
+      "decline": "Rechazar",
+      "cancel": "Cancelar",
+      "request": "Solicitud",
+      "addFriend": "Añadir",
+      "create": "Crear",
+      "transfer": "Transferir"
+    },
+    "friends": {
+      "title": "Amigos",
+      "incomingCount": "Nuevas solicitudes: {count}",
+      "hint": "Primero la lista de amigos; solicitudes y búsqueda abajo.",
+      "listAria": "Lista de amigos",
+      "myFriends": "Mis amigos",
+      "empty": "Aún no hay nadie — invita con solicitudes abajo.",
+      "requestsTitle": "Solicitudes y añadir amigos",
+      "incoming": "Solicitudes entrantes",
+      "noIncoming": "No hay solicitudes nuevas",
+      "outgoing": "Solicitudes salientes",
+      "none": "Ninguna",
+      "searchTitle": "Buscar por apodo",
+      "searchPlaceholder": "Introduce apodo…"
+    },
+    "toasts": {
+      "diamondsCredited": "+{amount} diamantes acreditados",
+      "alreadyFriends": "Ya sois amigos",
+      "alreadyPending": "Solicitud ya enviada",
+      "requestSent": "Solicitud enviada",
+      "friendAdded": "Añadido a amigos",
+      "memberAdded": "Añadido: {username}",
+      "friendRequestFrom": "Solicitud de amistad: {username}"
+    },
+    "system": {
+      "transferToYou": "Te han transferido {amount} dia.",
+      "transfer": "Transferencia de diamantes: {amount} (comisión {commission})"
+    },
+    "errors": {
+      "sendFailed": "No se pudo enviar",
+      "requestFailed": "No se pudo enviar la solicitud",
+      "acceptFailed": "No se pudo aceptar",
+      "genericFailed": "No se pudo completar",
+      "openChatFailed": "No se pudo abrir el chat",
+      "createGroupFailed": "No se pudo crear el grupo",
+      "addMemberFailed": "No se pudo añadir",
+      "minDiamonds": "Mínimo 3 diamantes"
+    },
+    "confirms": {
+      "leaveChat": "¿Salir de este chat?"
+    },
+    "modals": {
+      "newDmTitle": "Nuevo chat directo",
+      "nicknamePlaceholder": "Apodo…",
+      "newGroupTitle": "Nuevo grupo",
+      "groupNamePlaceholder": "Título",
+      "groupHint": "Puedes añadir miembros después de crear (búsqueda en la cabecera del chat).",
+      "transferTitle": "Transferencia de diamantes"
+    },
+    "transfer": {
+      "preview": {
+        "receiver": "Recibe:",
+        "fee": "comisión {pct}%",
+        "total": "total:"
+      },
+      "minHint": "Mínimo {min} diamantes al destinatario.",
+      "amountLabel": "Cantidad (entero, desde {min})"
+    }
+  },
+  "catalog": {
+    "proRacing": { "desc": "Carreras arcade con rocas, diamantes y mejoras." },
+    "rps": { "desc": "Juego clásico: robot, salas online y apuestas con diamantes." },
+    "tamagochi": { "desc": "Mundo de mascotas: alimenta, juega, duerme y observa a otros." },
+    "teamTerritory": { "desc": "Pinta el campo G×G más rápido que tus rivales: ticks, pintura, Challenge y recompensas con diamantes." },
+    "mc2d": { "desc": "Minería 2D, cola al mundo, polvo e intercambio con diamantes de GameHub." }
+  },
+  "teamTerritory": {
+    "nav": { "hub": "Hub" },
+    "wip": { "unavailable": "Team Territory aún no está disponible.", "backToHub": "Volver al hub" },
+    "spectator": {
+      "banner": "Espectador: no puedes pintar. Espera al siguiente partido.",
+      "queue": "Cola: {pos}"
+    },
+    "lobby": {
+      "title": "Lobby",
+      "room": "Sala: {roomId}",
+      "roomId": "ID de sala",
+      "teams": "Equipos:",
+      "teamN": "equipo {team}",
+      "readyFlag": "listo",
+      "ready": "Listo"
+    },
+    "match": {
+      "tick": "Tick #{tick}",
+      "tickCloseIn": "Cierre del tick en: {seconds} s",
+      "paint": "Pintura: {cur} / {max}",
+      "opponentInk": "Pintura rival (total): {sum}",
+      "stall": "Sin acciones — empate en {seconds} s",
+      "buyPaint": "Comprar +{amount} ({cost} 💎)"
+    },
+    "finish": {
+      "title": "Partido terminado",
+      "scores": "Puntuación por equipo",
+      "winners": "Equipos ganadores",
+      "backToLobby": "Volver al lobby"
+    },
+    "challenge": {
+      "title": "Challenge · modo {mode}",
+      "deadline": "Límite de ronda: {time}",
+      "submit": "Responder",
+      "letter": "Letra",
+      "next": "Siguiente"
+    }
+  },
+  "tama": {
+    "title": "Tamagochi World",
+    "guide": "Guía",
+    "noPet": "No tienes mascota. Elige un tipo y adopta.",
+    "adopt": "Adoptar",
+    "petName": "Nombre (opcional)",
+    "recreate": "Crear una nueva mascota ({coins} 🪙)",
+    "history": "Mascotas pasadas",
+    "ageDays": "Edad: {days} días",
+    "bestDiamondRate": "Con stats máx.: ~1 diamante / {minutes} min",
+    "toyBoostActive": "Boost de juguete activo",
+    "diamondSearch": "Búsqueda de diamante",
+    "backToGames": "A juegos",
+    "adoptTypeAria": "Tipo de mascota",
+    "ws": { "connectingTitle": "Conectando al campo" },
+    "status": "Estado",
+    "sleeping": "Durmiendo",
+    "stats": { "hp": "Salud", "fullness": "Satisfacción", "mood": "Ánimo", "energy": "Energía" },
+    "encounter": { "fight": "Pelea", "play": "Juego" },
+    "petTypes": { "cat": "Gato", "dog": "Perro", "pokemon": "Pokemon", "capybara": "Capibara", "alien": "Alien" },
+    "foodFor": { "cat": "para gato", "dog": "para perro", "pokemon": "para pokemon", "capybara": "para capibara", "alien": "para alien" },
+    "activities": {
+      "wandering": "pasea",
+      "moving": "se mueve",
+      "sleeping": "duerme",
+      "fighting": "lucha",
+      "playing_with_other": "juega",
+      "eating_map_food": "come",
+      "digging": "excava",
+      "hunting": "caza",
+      "sparking": "chispea",
+      "relaxing": "descansa",
+      "scanning": "escanea",
+      "exploring": "explora"
+    },
+    "diamondsOnMap": "Búsqueda de diamantes en el mapa",
+    "searchActivity": "Actividad de búsqueda",
+    "searchActivityHint": "Cuanto más alta la barra, más a menudo la mascota puede iniciar la búsqueda. Pausa media: ~{minutes} min (aleatoria).",
+    "diamondBlocked": "Ahora no se inicia: el bienestar medio está por debajo del umbral ({avg}%; se necesita ~38%). Alimenta, deja dormir y mejora el ánimo.",
+    "toyPassiveLeft": "Juguete (ánimo): queda",
+    "toyDiamondBoostLeft": "Boost búsqueda diamantes: queda",
+    "searchResetHint": "Búsqueda de diamante: cualquier comando o comer del mapa reinicia el progreso",
+    "actions": {
+      "feed": "Alimentar",
+      "play": "Jugar ({coins} 🪙)",
+      "heal": "+10% HP ({coins} 🪙)",
+      "healHint": "Añade 10% a la barra de HP",
+      "sleep": "Dormir ({coins} 🪙)",
+      "wake": "Despertar"
+    },
+    "shop": {
+      "title": "Tienda",
+      "hint": "Un toque — una compra. Se paga con monedas; precios y cambio se actualizan cada hora.",
+      "diamonds": "Diamantes",
+      "coins": "Monedas",
+      "exchangeOne": "Cambiar 1 💎 por {rate} monedas",
+      "food": "Comida",
+      "toy": "Juguete",
+      "coinsPerPiece": "{coins} monedas / ud.",
+      "inStock": "En stock: {count}",
+      "buy": "Comprar",
+      "toyBoostMood": "Boost de ánimo",
+      "inBackpack": "En mochila: {count}",
+      "whatItemsDo": "Qué hacen los objetos",
+      "toySuccess": "Juguete activo: el ánimo baja más lento (~24 h por compra, acumulable). Boost de frecuencia de búsqueda — 10 minutos (acumulable). Mira el panel “Búsqueda de diamante” a la izquierda."
+    },
+    "guideHowStatsWork": "Cómo funcionan los parámetros",
+    "worldMap": "Mapa del mundo",
+    "worldSync": {
+      "title": "Preparando la mascota en el campo",
+      "text": "La mascota ya está creada — aparecerá en el mapa en unos segundos. Es normal, espera."
+    },
+    "mapHint": "Clic en el campo — ordenar a la mascota ir a un punto. No puedes interactuar con mascotas ajenas, solo observar.",
+    "online": " en línea",
+    "petTooltip": "{owner} • {type} • ánimo: {mood}{online}",
+    "guideOk": "Entendido",
+    "guideSections": [
+      { "title": "Qué son las barras", "html": "<p>Tu mascota tiene cuatro barras: <b>salud</b>, <b>satisfacción</b>, <b>ánimo</b> y <b>energía</b>. Más alta la satisfacción — más lleno. Energía: correr/jugar la baja, dormir la sube.</p>" },
+      { "title": "Cómo recuperar salud", "html": "<ul><li><b>Dormir</b>: la salud sube ~2× más rápido si no tiene mucha hambre (igual para energía).</li><li>El botón <b>+10% HP</b> añade 10% al instante por <b>30 monedas</b>.</li><li>No dejes que tenga mucha hambre o esté agotado.</li></ul>" },
+      { "title": "Cómo recuperar satisfacción", "html": "<p>Pulsa <b>Alimentar</b> si tienes comida para tu tipo. La comida se compra en la tienda con monedas.</p>" },
+      { "title": "Cómo subir el ánimo", "html": "<p>Pulsa <b>Jugar</b> — cuesta <b>25 monedas</b>. El juguete hace que el ánimo baje más lento.</p>" },
+      { "title": "Cómo recuperar energía", "html": "<p>Ponlo a dormir con <b>Dormir</b> (<b>10 monedas</b>). ~<b>5 horas</b> de sueño continuo restaura la energía. Si llega a cero, <b>se duerme</b> solo.</p>" },
+      { "title": "Sobre los diamantes", "html": "<p>Busca diamantes cuando está bien. Si el <b>bienestar medio</b> es bajo, no empieza. El juguete da bonus pasivo y un <b>boost de 10 min</b> (acumulables).</p>" },
+      { "title": "Por qué todo está conectado", "html": "<p>Una mascota cansada, hambrienta o enferma pierde energía más rápido. Como las personas.</p>" },
+      { "title": "En el mapa con otras mascotas", "html": "<p>Si una <b>duerme</b>, no jugarán ni pelearán. A veces una despierta puede <b>despertar</b> a otra — ~<b>1 de 20</b>.</p>" },
+      { "title": "Edad y diamantes", "html": "<p>Cuanto más vive sin recrearla, más a menudo encuentra diamantes: nueva — ~<b>1 diamante / 2 min</b>, después de ~3 meses — hasta <b>1 diamante / 1 min</b>.</p>" },
+      { "title": "Consejo", "html": "<p class=\"guide-tip\">Consejo: antes de un paseo largo, revisa la energía y lleva comida.</p>" }
+    ],
+    "units": {
+      "dash": "—",
+      "pcs": "uds.",
+      "minutesShort": "{n} min",
+      "hoursShort": "{n} h",
+      "daysShort": "{n} d",
+      "hours": "{n} h"
+    },
+    "recreateConfirm": {
+      "title": "¿Crear una mascota nueva?",
+      "text": "Tu mascota actual se archivará en el historial y empezarás con una nueva. Desaparecerá del mapa y su estado se reiniciará. ¿Continuar?",
+      "confirm": "Crear nueva"
+    }
+  },
+  "proRacing": {
+    "menu": {
+      "title": "Menú principal",
+      "hello": "Hola, {username}",
+      "diamonds": "Diamantes",
+      "carLevel": "Nivel del coche",
+      "mode": "Modo",
+      "normal": "Normal",
+      "normalDesc": "Carrera clásica, WASD",
+      "hard": "Difícil",
+      "hardDesc": "Modificadores más rápidos y duros",
+      "twoPlayers": "Dos jugadores",
+      "twoPlayersLocked": "Se requiere nivel 3 (ahora {level})",
+      "twoPlayersDesc": "Flechas — segundo jugador",
+      "more": "Más",
+      "store": "Tienda y ajustes",
+      "leaderboard": "Clasificación",
+      "backToHub": "Volver al hub"
+    },
+    "abilities": {
+      "drugs": "Drugs",
+      "immue": "Immue",
+      "rockspeed": "Rockspeed",
+      "hearty": "Hearty"
+    },
+    "store": {
+      "title": "Tienda",
+      "diamondsSuffix": "diamantes",
+      "sound": "Sonido",
+      "music": "Música del juego",
+      "sfx": "Efectos de sonido",
+      "car": "Coche",
+      "carLevel": "Nivel: {level}",
+      "maxLevel": "Nivel máximo",
+      "upgradeFor": "Mejorar por {cost} dia.",
+      "carHint": "Mejora el nivel de la carrocería (visual en el juego).",
+      "nextCost": "Coste del siguiente nivel: {cost} diamantes.",
+      "superpowers": "Superpoderes",
+      "price": "{cost} dia.",
+      "buy": "Comprar",
+      "offer": {
+        "drugs": "Boost temporal",
+        "immue": "Invulnerabilidad corta",
+        "rockspeed": "Ralentiza las rocas",
+        "hearty": "Salvarte de un golpe"
+      },
+      "toasts": {
+        "carUpgraded": "Coche mejorado",
+        "purchased": "Comprado: {item}"
+      },
+      "errors": {
+        "maxCarLevel": "El coche ya está al nivel máximo",
+        "alreadyPurchased": "Ya comprado"
+      }
+    },
+    "leaderboard": {
+      "title": "Clasificación",
+      "subtitle": "Top por récord de supervivencia (segundos)",
+      "player": "Jugador",
+      "level": "Nivel",
+      "seconds": "Segundos",
+      "empty": "Aún no hay registros"
+    },
+    "game": {
+      "restart": "Reiniciar",
+      "fieldAria": "Campo de juego",
+      "connecting": "Conectando al juego…",
+      "reconnect": "Reconectar",
+      "time": "Tiempo",
+      "secondsShort": "s",
+      "speed": "Velocidad",
+      "kmh": "km/h",
+      "gameOverTitle": "Juego terminado",
+      "survived": "Has aguantado {seconds} s",
+      "winner": "Ganador: {winner}",
+      "toMenu": "Al menú",
+      "again": "Otra vez",
+      "controlsPvp": "Jugador 1: WASD · Jugador 2: flechas",
+      "controls": "Controles: WASD o botones abajo",
+      "abilitiesHint": "Habilidades:"
+    }
+  },
+  "rps": {
+    "menu": {
+      "hint": "Elige un modo.",
+      "robot": "Robot",
+      "robotDesc": "Juega contra un bot (3 rondas).",
+      "online": "Salas online",
+      "onlineDesc": "Crea o entra en una sala, apuesta opcional de diamantes."
+    },
+    "onlineLobby": {
+      "hint": "Elige una sala con hueco libre.",
+      "room": "Sala {n}"
+    },
+    "onlineRoom": {
+      "title": "Sala {n}",
+      "betLabel": "Apuesta (diamantes)",
+      "chatTitle": "Chat",
+      "chatPlaceholder": "Mensaje…"
+    },
+    "moves": { "rock": "Piedra", "paper": "Papel", "scissors": "Tijeras" },
+    "opponent": "Oponente",
+    "youChoice": "Tu elección",
+    "verdict": { "win": "Victoria", "lose": "Derrota", "tie": "Empate" },
+    "end": {
+      "eyebrow": "Resultado del partido (3 rondas)",
+      "titleWin": "¡Victoria!",
+      "titleLose": "Derrota",
+      "titleTie": "¡Empate!",
+      "scoreLine": "Tú {player}:{opponent} {opponentLabel}",
+      "tieHint": "Mismo número de victorias: el partido terminó en empate.",
+      "rewardPending": "El diamante aparecerá pronto en tu cartera…",
+      "rewardWon": "+1 diamante a tu cartera de GameHub",
+      "rewardLose": "¡La próxima vez tendrás suerte!",
+      "restart": "Jugar de nuevo",
+      "exit": "Salir del juego"
+    },
+    "round": "Ronda {cur}/{total}"
+  },
+  "mc2d": {
+    "loot": {
+      "sand_block": "Arena",
+      "dirt_block": "Tierra",
+      "stone_block": "Piedra",
+      "iron_block": "Hierro",
+      "raw_diamond": "Diamante en bruto",
+      "apple": "Manzana"
+    },
+    "nav": {
+      "hub": "Hub"
+    },
+    "wip": {
+      "unavailable": "Minecraft 2D Online aún no está disponible.",
+      "backToHub": "Volver al hub"
+    },
+    "hud": {
+      "diamonds": "Diamantes: {diamonds}",
+      "depth": "Profundidad: {depth}",
+      "stamina": "Energía de minería",
+      "pickaxe": "Pico: {level}",
+      "dustTitle": "Polvo de diamante",
+      "exchangeRate": "Cambio: {rate} por 1 diamante GameHub",
+      "loot": "Botín"
+    },
+    "lobby": {
+      "queuePos": "Cola: posición {pos}",
+      "hint": "Lobby — pulsa “Al mundo” si hay un hueco (máx. 10).",
+      "joinWorld": "Al mundo",
+      "leaveToLobby": "Salir al lobby"
+    },
+    "actions": {
+      "basePaid": "A la base (1 diamante)",
+      "exchange": "Cambiar 1 diamante → polvo de diamante",
+      "smeltAll": "Fundir todo → polvo de diamante",
+      "smeltDetail": "piedra ×{stone}, hierro ×{iron}",
+      "eatApple": "Comer manzana (+{energy} energía)",
+      "buyApple": "Comprar manzana ({dust} polvo de diamante)",
+      "deliverDiamond": "Entregar diamante en bruto (diamante GameHub)"
+    },
+    "escape": {
+      "pending": "Teletransporte en {seconds} s… El inventario se vaciará.",
+      "title": "¿Necesitas salir?",
+      "ghDiamonds": "Diamantes GameHub: {diamonds}",
+      "noDiamonds": "Sin diamantes — puedes hacerlo gratis, pero el inventario se reinicia y esperarás 10 s.",
+      "paid": "Teletransporte por 1 diamante",
+      "free": "Gratis (10 s, sin cartera)"
+    },
+    "hint": {
+      "controls": "A/D — caminar, Space — salto, clic — minar, R — bloque (1/2/3). “A la base” teletransporta a casa por 1 diamante.",
+      "persist": "La posición se guarda al salir."
+    },
+    "exchange": {
+      "title": "Cambiar diamante por polvo de diamante",
+      "rate": "Tasa actual: {rate} polvo de diamante por 1 diamante (8–20).",
+      "balance": "Saldo de diamantes: {diamonds}",
+      "spend": "Gastar 1 diamante"
+    },
+    "errors": {
+      "noBlocks": "No hay bloques en el inventario"
+    },
+    "toasts": {
+      "weekReset": "Nueva semana: mapa actualizado",
+      "staminaGain": "+{amount} energía",
+      "appleBought": "Manzana comprada (−{dust} polvo de diamante)",
+      "smelted": "+{dust} polvo de diamante (piedra ×{stone}, hierro ×{iron})",
+      "dustGain": "+{dust} polvo de diamante",
+      "teleportBase": "Teletransporte a la base"
+    }
+  }
+}

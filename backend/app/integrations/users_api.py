@@ -34,6 +34,7 @@ def default_gamehub_other_data() -> dict[str, Any]:
     mc2d_key = settings.minecraft_2d_online_game_key
     return {
         "diamonds": 0,
+        "ui_lang": "en",
         "games": {
             game_key: {
                 "car_level": 1,
@@ -186,12 +187,12 @@ class UsersApiClient:
             db.close()
 
     def increment_diamonds(self, username: str, delta: int = 1) -> int | None:
-        """Увеличить алмазы в БД по логину; вернуть новый баланс или None."""
+        """Increase diamonds in DB with row lock; return new balance or None."""
         from app.core.gameshub import ensure_gameshub_schema
 
         db = self._db()
         try:
-            u = db.query(GameHubUser).filter(GameHubUser.username == username).first()
+            u = db.query(GameHubUser).filter(GameHubUser.username == username).with_for_update().first()
             if u is None:
                 return None
             other = ensure_gameshub_schema(u.other_data or {})

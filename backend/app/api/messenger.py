@@ -568,7 +568,8 @@ async def unread_summary(db: Session = Depends(get_db), me: GameHubUser = Depend
 class TransferDiamondsBody(BaseModel):
     chat_id: int = Field(ge=1)
     to_user_id: int = Field(ge=1)
-    amount: int = Field(ge=3, description="Минимум 3 алмаза к получателю")
+    amount: int = Field(ge=3, description="Minimum 3 diamonds to recipient")
+    idempotency_key: str | None = Field(default=None, max_length=128)
 
 
 @router.post("/transfer-diamonds")
@@ -579,14 +580,39 @@ async def transfer_diamonds(
     me: GameHubUser = Depends(get_messenger_user),
 ) -> dict:
     if body.to_user_id == me.id:
-        raise HTTPException(status_code=400, detail="Invalid recipient")
+        raise HTTPException(status_code=400, detail={"code": "invalid_recipient"})
     if _active_member(db, body.chat_id, me.id) is None:
-        raise HTTPException(status_code=403, detail="Not a member")
+        raise HTTPException(status_code=403, detail={"code": "not_a_member"})
     if _active_member(db, body.chat_id, body.to_user_id) is None:
-        raise HTTPException(status_code=400, detail="Recipient not in chat")
+        raise HTTPException(status_code=400, detail={"code": "recipient_not_in_chat"})
     recipient = db.query(GameHubUser).filter(GameHubUser.id == body.to_user_id).first()
     if recipient is None:
-        raise HTTPException(status_code=404, detail="Recipient not found")
+        raise HTTPException(status_code=404, detail={"code": "recipient_not_found"})
+
+    idem = (body.idempotency_key or "").strip() or None
+    if idem:
+        existing = db.query(MessengerDiamondLedger).filter(MessengerDiamondLedger.idempotency_key == idem).first()
+        if existing is not None:
+            msg = db.query(MessengerMessage).filter(MessengerMessage.id == existing.message_id).first()
+            if msg is not None:
+                s_bal = users_api.get_diamond_balance(me.username)
+                r_bal = users_api.get_diamond_balance(recipient.username)
+                return {
+                    "message": {
+                        "id": msg.id,
+                        "seq": int(msg.seq),
+                        "sender_id": me.id,
+                        "sender_username": me.username,
+                        "kind": msg.kind,
+                        "body": msg.body,
+                        "created_at": msg.created_at.isoformat(),
+                    },
+                    "commission": int(existing.commission),
+                    "total_debit": int(existing.total_debit),
+                    "idempotent": True,
+                    "sender_balance": s_bal,
+                    "recipient_balance": r_bal,
+                }
     sender_ip = client_ip(request)
     rip = db.query(UserLastIp).filter(UserLastIp.user_id == body.to_user_id).first()
     recipient_ip = rip.ip if rip else ""
@@ -595,19 +621,36 @@ async def transfer_diamonds(
             status_code=400,
             detail={
                 "code": "same_ip",
-                "message": "Операция отклонена системой антимошенничества. Перевод между этими аккаунтами сейчас невозможен.",
             },
         )
     a = int(body.amount)
     f = _commission(a)
     total = a + f
     try:
-        s_new = users_api.adjust_diamonds_session(db, me.username, -total)
-        if s_new is None:
-            raise HTTPException(status_code=400, detail="Insufficient diamonds")
-        r_new = users_api.adjust_diamonds_session(db, recipient.username, a)
-        if r_new is None:
-            raise RuntimeError("recipient adjust failed")
+        names = sorted([me.username, recipient.username])
+        locked: dict[str, GameHubUser] = {}
+        for name in names:
+            u = db.query(GameHubUser).filter(GameHubUser.username == name).with_for_update().first()
+            if u is None:
+                raise HTTPException(status_code=404, detail={"code": "user_not_found"})
+            locked[name] = u
+        from app.core.gameshub import ensure_gameshub_schema
+
+        sender_u = locked[me.username]
+        recipient_u = locked[recipient.username]
+        s_other = ensure_gameshub_schema(sender_u.other_data or {})
+        r_other = ensure_gameshub_schema(recipient_u.other_data or {})
+        s_cur = int(s_other.get("diamonds", 0))
+        r_cur = int(r_other.get("diamonds", 0))
+        s_new = s_cur - total
+        if s_new < 0:
+            raise HTTPException(status_code=400, detail={"code": "insufficient_diamonds", "params": {"required": total}})
+        r_new = r_cur + a
+        s_other["diamonds"] = s_new
+        r_other["diamonds"] = r_new
+        sender_u.other_data = s_other
+        recipient_u.other_data = r_other
+        db.flush()
         seq = _alloc_seq(db, body.chat_id)
         meta = json.dumps({"amount": a, "commission": f, "total_debit": total, "to_user_id": body.to_user_id})
         msg = MessengerMessage(
@@ -630,13 +673,14 @@ async def transfer_diamonds(
                 recipient_ip=recipient_ip or None,
                 chat_id=body.chat_id,
                 message_id=msg.id,
+                idempotency_key=idem,
             )
         )
         now = datetime.now(timezone.utc)
         chat = db.query(MessengerChat).filter(MessengerChat.id == body.chat_id).first()
         if chat:
             chat.last_message_at = now
-            chat.last_message_preview = f"Перевод {a} алм."
+            chat.last_message_preview = json.dumps({"kind": "diamond_transfer", "amount": a})
             chat.updated_at = now
         mids = _chat_member_ids(db, body.chat_id)
         for uid in mids:
@@ -654,7 +698,7 @@ async def transfer_diamonds(
         raise
     except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail="Transfer failed")
+        raise HTTPException(status_code=500, detail={"code": "transfer_failed"})
     db.refresh(msg)
     sync_diamonds_to_sessions(me.username, s_new)
     sync_diamonds_to_sessions(recipient.username, r_new)

@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, TransitionGroup } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { apiPost, ApiHttpError } from '../../api/client'
 import { useAuthStore } from '../../stores/auth'
 import { playProRacingSfx, stopGameMusicOnly } from '../../audio/sound'
 import { proRacingMusicEnabled, proRacingSfxEnabled } from './audioSettings'
 
-/** Как backend/app/api/store.py CARS_COSTS */
+/** Like backend/app/api/store.py CARS_COSTS */
 const CARS_COSTS: Record<number, number> = { 1: 0, 2: 20, 3: 100 }
 
 const auth = useAuthStore()
 const router = useRouter()
+const { t } = useI18n()
 
 const carLevel = computed(() =>
   Number((auth.otherData as any)?.games?.misha_pro_racing_game?.car_level ?? 1),
@@ -50,12 +52,12 @@ function apiErrorText(e: unknown): string {
   if (e instanceof ApiHttpError) {
     const m = e.message
     const need = /^Need (\d+) diamonds$/i.exec(m)
-    if (need) return `Не хватает ${need[1]} алмазов`
-    if (/Max car level/i.test(m)) return 'Машина максимального уровня'
-    if (/Already purchased/i.test(m)) return 'Уже куплено'
+    if (need) return t('errors.insufficient_diamonds', { required: Number(need[1]) })
+    if (/Max car level/i.test(m)) return t('proRacing.store.errors.maxCarLevel')
+    if (/Already purchased/i.test(m)) return t('proRacing.store.errors.alreadyPurchased')
     return m
   }
-  return 'Ошибка запроса'
+  return t('common.networkError')
 }
 
 function onMusicToggle() {
@@ -64,7 +66,7 @@ function onMusicToggle() {
 
 async function upgradeCar() {
   if (carLevel.value >= 3) {
-    pushToast('Машина максимального уровня', 'warn')
+    pushToast(t('proRacing.store.errors.maxCarLevel'), 'warn')
     return
   }
   try {
@@ -74,7 +76,7 @@ async function upgradeCar() {
     ;(auth.otherData as any).games.misha_pro_racing_game = (auth.otherData as any).games.misha_pro_racing_game ?? {}
     ;(auth.otherData as any).games.misha_pro_racing_game.car_level = data.car_level
     ;(auth.otherData as any).diamonds = data.diamonds
-    pushToast('Машина улучшена', 'ok')
+    pushToast(t('proRacing.store.toasts.carUpgraded'), 'ok')
   } catch (e) {
     pushToast(apiErrorText(e), 'warn')
   }
@@ -92,7 +94,7 @@ async function buy(superpower: string) {
     ;(auth.otherData as any).games = (auth.otherData as any).games ?? {}
     ;(auth.otherData as any).games.misha_pro_racing_game = (auth.otherData as any).games.misha_pro_racing_game ?? {}
     ;(auth.otherData as any).games.misha_pro_racing_game.superpowers = data.superpowers
-    pushToast(`Куплено: ${labelSp(superpower)}`, 'ok')
+    pushToast(t('proRacing.store.toasts.purchased', { item: labelSp(superpower) }), 'ok')
   } catch (e) {
     pushToast(apiErrorText(e), 'warn')
   }
@@ -120,83 +122,83 @@ function back() {
     <section class="pr-shell">
       <header class="pr-head">
         <p class="pr-kicker">Pro Racing</p>
-        <h1 class="pr-title">Магазин</h1>
+        <h1 class="pr-title">{{ t('proRacing.store.title') }}</h1>
         <p class="pr-balance">
           <img src="/assets/original/brilliant.png" alt="" class="pr-diamond-ico" width="28" height="18" />
           <span>{{ (auth.otherData as any).diamonds ?? 0 }}</span>
-          <span class="pr-balance-hint">алмазов</span>
+          <span class="pr-balance-hint">{{ t('proRacing.store.diamondsSuffix') }}</span>
         </p>
       </header>
 
       <div class="pr-card">
-        <h2 class="pr-card-title">Звук</h2>
+        <h2 class="pr-card-title">{{ t('proRacing.store.sound') }}</h2>
         <label class="pr-toggle">
           <input v-model="proRacingMusicEnabled" type="checkbox" class="pr-toggle-input" @change="onMusicToggle" />
           <span class="pr-toggle-ui" />
-          <span class="pr-toggle-text">Музыка в игре</span>
+          <span class="pr-toggle-text">{{ t('proRacing.store.music') }}</span>
         </label>
         <label class="pr-toggle">
           <input v-model="proRacingSfxEnabled" type="checkbox" class="pr-toggle-input" />
           <span class="pr-toggle-ui" />
-          <span class="pr-toggle-text">Звуковые эффекты</span>
+          <span class="pr-toggle-text">{{ t('proRacing.store.sfx') }}</span>
         </label>
       </div>
 
       <div class="pr-card">
-        <h2 class="pr-card-title">Машина</h2>
-        <p class="pr-car-level">Уровень: {{ carLevel }} / 3</p>
+        <h2 class="pr-card-title">{{ t('proRacing.store.car') }}</h2>
+        <p class="pr-car-level">{{ t('proRacing.store.carLevel', { level: carLevel }) }} / 3</p>
         <button
           type="button"
           class="pr-primary"
           :disabled="carLevel >= 3"
           @click="upgradeCar"
         >
-          <template v-if="carLevel >= 3">Максимальный уровень</template>
-          <template v-else>Улучшить за {{ nextUpgradeCost }} алм.</template>
+          <template v-if="carLevel >= 3">{{ t('proRacing.store.maxLevel') }}</template>
+          <template v-else>{{ t('proRacing.store.upgradeFor', { cost: nextUpgradeCost }) }}</template>
         </button>
         <p class="pr-hint">
-          Повышает уровень кузова (визуал в игре).
-          <template v-if="carLevel < 3"> Стоимость следующего шага: {{ nextUpgradeCost }} алмазов.</template>
+          {{ t('proRacing.store.carHint') }}
+          <template v-if="carLevel < 3"> {{ t('proRacing.store.nextCost', { cost: nextUpgradeCost }) }}</template>
         </p>
       </div>
 
-      <h2 class="pr-section-title">Суперспособности</h2>
+      <h2 class="pr-section-title">{{ t('proRacing.store.superpowers') }}</h2>
       <div class="pr-shop-grid">
         <div class="pr-offer">
           <div class="pr-offer-top">
             <span class="pr-offer-name">Drugs</span>
-            <span class="pr-offer-price">50 алм.</span>
+            <span class="pr-offer-price">{{ t('proRacing.store.price', { cost: 50 }) }}</span>
           </div>
-          <p class="pr-offer-desc">Временный буст</p>
-          <button type="button" class="pr-buy" @click="buy('drugs')">Купить</button>
+          <p class="pr-offer-desc">{{ t('proRacing.store.offer.drugs') }}</p>
+          <button type="button" class="pr-buy" @click="buy('drugs')">{{ t('proRacing.store.buy') }}</button>
         </div>
         <div class="pr-offer">
           <div class="pr-offer-top">
             <span class="pr-offer-name">Immue</span>
-            <span class="pr-offer-price">200 алм.</span>
+            <span class="pr-offer-price">{{ t('proRacing.store.price', { cost: 200 }) }}</span>
           </div>
-          <p class="pr-offer-desc">Короткая неуязвимость</p>
-          <button type="button" class="pr-buy" @click="buy('immue')">Купить</button>
+          <p class="pr-offer-desc">{{ t('proRacing.store.offer.immue') }}</p>
+          <button type="button" class="pr-buy" @click="buy('immue')">{{ t('proRacing.store.buy') }}</button>
         </div>
         <div class="pr-offer">
           <div class="pr-offer-top">
             <span class="pr-offer-name">Rockspeed</span>
-            <span class="pr-offer-price">300 алм.</span>
+            <span class="pr-offer-price">{{ t('proRacing.store.price', { cost: 300 }) }}</span>
           </div>
-          <p class="pr-offer-desc">Замедление камней</p>
-          <button type="button" class="pr-buy" @click="buy('rockspeed')">Купить</button>
+          <p class="pr-offer-desc">{{ t('proRacing.store.offer.rockspeed') }}</p>
+          <button type="button" class="pr-buy" @click="buy('rockspeed')">{{ t('proRacing.store.buy') }}</button>
         </div>
         <div class="pr-offer">
           <div class="pr-offer-top">
             <span class="pr-offer-name">Hearty rock</span>
-            <span class="pr-offer-price">100 алм.</span>
+            <span class="pr-offer-price">{{ t('proRacing.store.price', { cost: 100 }) }}</span>
           </div>
-          <p class="pr-offer-desc">Спасение от удара</p>
-          <button type="button" class="pr-buy" @click="buy('hearty_rock')">Купить</button>
+          <p class="pr-offer-desc">{{ t('proRacing.store.offer.hearty') }}</p>
+          <button type="button" class="pr-buy" @click="buy('hearty_rock')">{{ t('proRacing.store.buy') }}</button>
         </div>
       </div>
 
-      <button type="button" class="pr-back" @click="back">← В меню</button>
+      <button type="button" class="pr-back" @click="back">← {{ t('common.back') }}</button>
 
       <Teleport to="body">
         <div class="pr-notify-stack" aria-live="polite">
@@ -207,7 +209,7 @@ function back() {
               :class="['pr-notify', t.variant === 'warn' ? 'pr-notify--warn' : 'pr-notify--ok']"
             >
               <span class="pr-notify-text">{{ t.text }}</span>
-              <button type="button" class="pr-notify-close" aria-label="Закрыть" @click="dismissToast(t.id)">×</button>
+              <button type="button" class="pr-notify-close" :aria-label="t('common.close')" @click="dismissToast(t.id)">×</button>
             </div>
           </TransitionGroup>
         </div>

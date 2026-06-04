@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
 import { playSfx } from '../audio/sound'
 import { ApiHttpError } from '../api/client'
@@ -8,11 +9,12 @@ import { ApiHttpError } from '../api/client'
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
+const { t, locale } = useI18n()
 const username = ref('')
 const password = ref('')
 const error = ref('')
 const blockedWarningsHistory = ref<{ text: string; created_at: string }[]>([])
-/** панель после ответа code=blocked (даже если список пуст) */
+/** Panel after code=blocked response (even if empty). */
 const showBlockedHistoryPanel = ref(false)
 
 const regToastMsg = ref('')
@@ -53,7 +55,7 @@ function showRegToast(message: string, err = false) {
 
 function fmtWarnTime(iso: string): string {
   try {
-    return new Date(iso).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })
+    return new Date(iso).toLocaleString(locale.value, { dateStyle: 'short', timeStyle: 'short' })
   } catch {
     return iso.slice(0, 16)
   }
@@ -65,7 +67,7 @@ function formatTempBanMessage(detail: { banned_until?: string; seconds_remaining
   if (iso) {
     try {
       const d = new Date(iso)
-      end = d.toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })
+      end = d.toLocaleString(locale.value, { dateStyle: 'short', timeStyle: 'short' })
     } catch {
       end = String(iso)
     }
@@ -74,8 +76,13 @@ function formatTempBanMessage(detail: { banned_until?: string; seconds_remaining
   const h = Math.floor(sec / 3600)
   const m = Math.floor((sec % 3600) / 60)
   const s = sec % 60
-  const left = h > 0 ? `${h} ч ${m} мин` : m > 0 ? `${m} мин ${s} с` : `${s} с`
-  return `Аккаунт временно заблокирован. Вход снова будет доступен: ${end || '—'}. Осталось примерно: ${left}.`
+  const left =
+    h > 0
+      ? t('login.timeLeft.hms', { h, m, s })
+      : m > 0
+        ? t('login.timeLeft.ms', { m, s })
+        : t('login.timeLeft.s', { s })
+  return t('login.errors.tempBan', { end: end || '—', left })
 }
 
 async function signIn() {
@@ -101,26 +108,25 @@ async function signIn() {
               .map((w) => ({ text: String(w.text), created_at: String(w.created_at ?? '') }))
           : []
         showBlockedHistoryPanel.value = true
-        error.value =
-          'Доступ заблокирован из‑за нарушений правил (лимит предупреждений). Ниже — история уведомлений системы безопасности.'
+        error.value = t('login.errors.blockedInfo')
         return
       }
       if (typeof raw === 'string' && raw === 'Account blocked') {
         blockedWarningsHistory.value = []
         showBlockedHistoryPanel.value = false
-        error.value = 'Аккаунт заблокирован навсегда. Обратитесь к администратору.'
+        error.value = t('login.errors.permanentBlocked')
         return
       }
     }
     showBlockedHistoryPanel.value = false
     blockedWarningsHistory.value = []
-    error.value = 'Ошибка входа: проверь логин и пароль'
+    error.value = t('login.errors.signIn')
   }
 }
 
 async function register() {
   if (isReservedUsername(username.value)) {
-    showRegToast('Имя пользователя зарезервировано системой (admindb, database).', true)
+    showRegToast(t('login.errors.reservedUsername'), true)
     return
   }
   try {
@@ -138,7 +144,7 @@ async function register() {
         showRegToast(
           typeof msg === 'string' && msg.trim()
             ? msg
-            : 'Имя пользователя зарезервировано системой (admindb, database).',
+            : t('login.errors.reservedUsername'),
           true,
         )
         return
@@ -148,13 +154,13 @@ async function register() {
         showRegToast(
           typeof msg === 'string' && msg.trim()
             ? msg
-            : 'Для вас сегодня лимит новых регистраций исчерпан: не более 2 новых аккаунтов за сутки. Создать ещё один сейчас нельзя — попробуйте завтра.',
+            : t('login.errors.dailyLimit'),
           true,
         )
         return
       }
     }
-    error.value = 'Ошибка регистрации: имя занято или сервер недоступен'
+    error.value = t('login.errors.register')
   }
 }
 
@@ -165,7 +171,7 @@ onBeforeUnmount(() => {
 
 <template>
   <main class="page page-login page-center login-page">
-    <aside class="login-corner" aria-label="Школа программирования">
+    <aside class="login-corner" :aria-label="t('login.cornerAria')">
       <div class="login-school-label">
         <span class="login-school-line login-school-line--1">Programming</span>
         <span class="login-school-line login-school-line--2">with</span>
@@ -193,21 +199,21 @@ onBeforeUnmount(() => {
       </header>
 
       <section class="panel login-card">
-        <h2 class="login-card-title">Аккаунт</h2>
-        <div class="login-fields">
+        <h2 class="login-card-title">{{ t('login.accountTitle') }}</h2>
+        <form class="login-fields" @submit.prevent="signIn">
           <label class="login-label">
-            <span>Имя пользователя</span>
+            <span>{{ t('login.username') }}</span>
             <input
               v-model="username"
               class="login-input"
               type="text"
-              placeholder="например, misha"
+              :placeholder="t('login.usernamePlaceholder')"
               autocomplete="username"
               maxlength="20"
             />
           </label>
           <label class="login-label">
-            <span>Пароль</span>
+            <span>{{ t('login.password') }}</span>
             <input
               v-model="password"
               class="login-input"
@@ -217,17 +223,17 @@ onBeforeUnmount(() => {
               maxlength="50"
             />
           </label>
-        </div>
-        <div class="login-actions">
-          <button type="button" class="btn login-btn login-btn-primary" @click="signIn">Войти</button>
-          <button type="button" class="btn login-btn login-btn-ghost" @click="register">Создать аккаунт</button>
-        </div>
+          <div class="login-actions">
+            <button type="submit" class="btn login-btn login-btn-primary">{{ t('login.signIn') }}</button>
+            <button type="button" class="btn login-btn login-btn-ghost" @click="register">{{ t('login.register') }}</button>
+          </div>
+        </form>
         <p v-if="error" class="login-error" role="alert">{{ error }}</p>
         <div
           v-if="showBlockedHistoryPanel"
           class="login-blocked-history"
           role="region"
-          aria-label="История предупреждений"
+          :aria-label="t('login.blockedHistoryAria')"
         >
           <ul v-if="blockedWarningsHistory.length" class="login-blocked-list">
             <li v-for="(w, idx) in blockedWarningsHistory" :key="idx" class="login-blocked-item">
@@ -235,7 +241,7 @@ onBeforeUnmount(() => {
               <span class="login-blocked-text">{{ w.text }}</span>
             </li>
           </ul>
-          <p v-else class="login-blocked-empty">В истории нет сохранённых текстов предупреждений.</p>
+          <p v-else class="login-blocked-empty">{{ t('login.blockedHistoryEmpty') }}</p>
         </div>
       </section>
     </div>

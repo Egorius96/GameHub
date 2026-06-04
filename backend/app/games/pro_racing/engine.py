@@ -17,9 +17,9 @@ ROCK_HIT_OX = (ROCK_SPRITE_W - ROCK_HIT_W) / 2.0
 ROCK_HIT_OY = (ROCK_SPRITE_H - ROCK_HIT_H) / 2.0
 # Базовая вероятность как в pygame 0.004; на 20% реже для веб-версии
 DIAMOND_SPAWN_CHANCE = 0.004 * 0.8
-# Ускорение камней (+0.1/с в оригинале) ×1.5 для веб-версии
-ROCK_ACCEL_PER_SEC = 0.15
-ROCK_ACCEL_ACS_PER_SEC = 0.45
+# Ускорение камней (+0.1/с в оригинале) ×1.5×1.5 для веб-версии
+ROCK_ACCEL_PER_SEC = 0.225
+ROCK_ACCEL_ACS_PER_SEC = 0.675
 HARD_MODIFIERS = [
     "rockhit_2",
     "diamond_no",
@@ -52,9 +52,10 @@ def rects_intersect_car_rock(player: PlayerState, rock: Entity) -> bool:
 
 
 class GameEngine:
-    def __init__(self, mode: str, car_level: int) -> None:
+    def __init__(self, mode: str, car_level: int, superpowers: dict[str, bool] | None = None) -> None:
         self.state = GameState(mode=mode)
         self.car_level = max(1, min(3, car_level))
+        self.superpowers: dict[str, bool] = dict(superpowers or {})
         if mode == "pvp_local":
             self.state.player1.y = 100
             self.state.player2.y = 450
@@ -100,7 +101,14 @@ class GameEngine:
         elif d == "right":
             pl.move_x = 1
 
+    def _owns(self, name: str) -> bool:
+        if self.state.mode == "hard" and self.state.hard_modifier == "no_super":
+            return False
+        return bool(self.superpowers.get(name, False))
+
     def ability(self, name: str) -> None:
+        if not self._owns(name):
+            return
         now = time.time()
         if name == "drugs" and self.state.drugs_limit > 0 and self.state.player1.lives > 1:
             self.state.drugs_limit -= 1

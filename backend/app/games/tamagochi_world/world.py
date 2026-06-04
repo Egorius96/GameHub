@@ -14,6 +14,7 @@ from app.core.session import sessions
 from app.integrations.users_api import users_api
 
 from .constants import TUNING
+from .pet_history import diamond_age_cooldown_multiplier, estimate_best_diamond_interval_minutes, pet_age_days
 from .pet_state import NeglectState, PetState, clamp_int, is_critical, register_visit, sync_pet_state
 from .timeutils import iso_utc, parse_dt
 
@@ -332,6 +333,7 @@ class TamagochiWorld:
             pets_public.append(
                 {
                     "owner": owner,
+                    "pet_name": pet.get("pet_name"),
                     "type": pet.get("type"),
                     "pos": pet.get("pos"),
                     "is_sleeping": bool(pet.get("is_sleeping", False)),
@@ -537,7 +539,8 @@ class TamagochiWorld:
         r = int.from_bytes(h[:2], "big", signed=False) / 65535.0
         base = float(TUNING.diamond_cooldown_min_sec)
         span = float(TUNING.diamond_cooldown_rand_span_sec)
-        return int((base + r * span) * factor)
+        age_mult = diamond_age_cooldown_multiplier(pet, now=now)
+        return int((base + r * span) * factor * age_mult)
 
     @staticmethod
     def _diamond_ui_info(owner: str, pet: PetState, *, now: datetime) -> dict:
@@ -559,15 +562,22 @@ class TamagochiWorld:
         est_min = 0.0
         if not blocked and factor > 0:
             cd_med = (float(TUNING.diamond_cooldown_min_sec) + float(TUNING.diamond_cooldown_rand_span_sec) / 2.0) * factor
+            age_mult = diamond_age_cooldown_multiplier(pet, now=now)
+            cd_med *= age_mult
             est_min = cd_med / 60.0
             pace = int(round(100.0 - (factor - 1.0) / 4.0 * 80.0))
             pace = max(15, min(100, pace))
+
+        age_days = round(pet_age_days(pet, now=now), 1)
+        best_at_max = estimate_best_diamond_interval_minutes(pet, now=now, wellbeing_factor=factor if not blocked else 1.0)
 
         return {
             "blocked": blocked,
             "avg_wellbeing": round(avg_well, 1),
             "pace_percent": pace,
             "estimated_cooldown_minutes": round(est_min, 1) if not blocked else None,
+            "pet_age_days": age_days,
+            "best_diamond_interval_minutes": best_at_max if not blocked else None,
             "toy_diamond_boost": toy_boost,
             "toy_diamond_minutes_left": None if td_left_min is None else round(td_left_min, 1),
             "toy_passive_hours_left": None if tp_left_h is None else round(tp_left_h, 2),

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
 import { playSfx } from '../audio/sound'
 import { startPresencePing, stopPresencePing } from '../telemetry/presence'
@@ -10,6 +11,7 @@ import { GAME_ASSETS_BASE } from '../config/gameAssets'
 const GAME_KEY = 'minecraft_2d_online'
 const router = useRouter()
 const auth = useAuthStore()
+const { t } = useI18n()
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const wsRef = ref<WebSocket | null>(null)
@@ -26,18 +28,18 @@ const LOOT_ITEMS: {
   stackMax?: number
   smeltable?: boolean
 }[] = [
-  { key: 'sand_block', label: 'Песок', accent: '#c4a35a', stackMax: 64 },
-  { key: 'dirt_block', label: 'Земля', accent: '#8d6e63', stackMax: 64 },
-  { key: 'stone_block', label: 'Камень', accent: '#78909c', smeltable: true },
-  { key: 'iron_block', label: 'Железо', accent: '#90a4ae', smeltable: true },
-  { key: 'raw_diamond', label: 'Сырой алмаз', accent: '#4dd0e1' },
-  { key: 'apple', label: 'Яблоко', accent: '#ef5350', stackMax: 64 },
+  { key: 'sand_block', label: t('mc2d.loot.sand_block'), accent: '#c4a35a', stackMax: 64 },
+  { key: 'dirt_block', label: t('mc2d.loot.dirt_block'), accent: '#8d6e63', stackMax: 64 },
+  { key: 'stone_block', label: t('mc2d.loot.stone_block'), accent: '#78909c', smeltable: true },
+  { key: 'iron_block', label: t('mc2d.loot.iron_block'), accent: '#90a4ae', smeltable: true },
+  { key: 'raw_diamond', label: t('mc2d.loot.raw_diamond'), accent: '#4dd0e1' },
+  { key: 'apple', label: t('mc2d.loot.apple'), accent: '#ef5350', stackMax: 64 },
 ]
 type PlaceItem = 'sand_block' | 'dirt_block' | 'stone_block'
 const PLACE_SLOTS: { key: PlaceItem; label: string; tile: number }[] = [
-  { key: 'sand_block', label: 'Песок', tile: 1 },
-  { key: 'dirt_block', label: 'Земля', tile: 2 },
-  { key: 'stone_block', label: 'Камень', tile: 3 },
+  { key: 'sand_block', label: t('mc2d.loot.sand_block'), tile: 1 },
+  { key: 'dirt_block', label: t('mc2d.loot.dirt_block'), tile: 2 },
+  { key: 'stone_block', label: t('mc2d.loot.stone_block'), tile: 3 },
 ]
 const selectedPlaceItem = ref<PlaceItem>('dirt_block')
 const cursorTile = ref<{ tx: number; ty: number } | null>(null)
@@ -46,7 +48,7 @@ const reducedMotion = ref(
 )
 
 const ATLAS_CELL = 32
-/** Размер тайла на canvas (совпадает с ячейкой атласа после сборки). */
+/** Canvas tile size (matches atlas cell after build). */
 const TILE = ATLAS_CELL
 
 const atlasImg = new Image()
@@ -76,7 +78,7 @@ const houseImgs: HTMLImageElement[] = [
   Object.assign(new Image(), { src: `${GAME_ASSETS_BASE}/mc2d/houses/home2.png` }),
 ]
 
-/** Fallback, если атлас не загрузился. */
+/** Fallback if atlas failed to load. */
 const TILE_COLORS: Record<number, string> = {
   0: 'rgba(120, 180, 255, 0.35)',
   1: '#e6d6a8',
@@ -95,7 +97,7 @@ let lastChunkCy = 99999
 let keys: Record<string, boolean> = {}
 let raf = 0
 
-/** Плавная позиция локального игрока (сервер + предсказание прыжка). */
+/** Smooth local player position (server + jump prediction). */
 let displayX = 0
 let displayY = 0
 let displayVy = 0
@@ -302,9 +304,9 @@ function connectWs() {
         void ensureChunksForView()
       } else if (msg.type === 'patches') {
         applyPatches(msg)
-        if (msg.week_reset) toast.value = 'Новая неделя: карта обновлена'
+        if (msg.week_reset) toast.value = t('mc2d.toasts.weekReset')
       } else if (msg.type === 'action_result') {
-        if (msg.ok === false) toast.value = String(msg.error ?? 'Ошибка')
+        if (msg.ok === false) toast.value = String(msg.error ?? t('errors.generic'))
         const pl = msg.payload
         if (pl && pl.ok === true && pl.tx != null && pl.ty != null) {
           const tx = Number(pl.tx)
@@ -326,21 +328,21 @@ function connectWs() {
           }
         }
         if (pl?.ok && pl.stamina_gain != null) {
-          toast.value = `+${pl.stamina_gain} энергии`
+          toast.value = t('mc2d.toasts.staminaGain', { amount: Number(pl.stamina_gain) })
         } else if (pl?.ok && pl.apples != null && pl.dust_spent != null) {
-          toast.value = `Куплено яблоко (−${pl.dust_spent} алмазной пыли)`
+          toast.value = t('mc2d.toasts.appleBought', { dust: Number(pl.dust_spent) })
         } else if (pl?.ok && pl.dust_gain != null) {
           const st = Number(pl.smelted_stone ?? 0)
           const ir = Number(pl.smelted_iron ?? 0)
-          toast.value = `+${pl.dust_gain} алмазной пыли (камень ×${st}, железо ×${ir})`
+          toast.value = t('mc2d.toasts.smelted', { dust: Number(pl.dust_gain), stone: st, iron: ir })
           void auth.refreshProfile()
         } else if (pl?.ok && pl.gained) {
-          toast.value = `+${pl.gained} алмазной пыли`
+          toast.value = t('mc2d.toasts.dustGain', { dust: Number(pl.gained) })
           void auth.refreshProfile()
         } else if (pl?.ok && pl.diamonds != null) {
           void auth.refreshProfile()
         } else if (pl?.escape || pl?.teleport === 'base') {
-          toast.value = 'Телепорт к базе'
+          toast.value = t('mc2d.toasts.teleportBase')
           void auth.refreshProfile()
         }
       }
@@ -414,7 +416,7 @@ async function ensureChunksForView() {
   }
 }
 
-/** Старый TILE.TREE (7) → песок под спрайтом дерева. */
+/** Old TILE.TREE (7) → sand under tree sprite. */
 function normalizeTileId(t: number): number {
   return t === 7 ? 1 : t
 }
@@ -595,7 +597,7 @@ function placeBlockAtCursor() {
   const cur = cursorTile.value
   if (!s || !inWorld.value || !cur) return
   if (Number(s.inv?.[selectedPlaceItem.value] ?? 0) < 1) {
-    toast.value = 'Нет блоков в инвентаре'
+    toast.value = t('mc2d.errors.noBlocks')
     return
   }
   playSfx('button')
@@ -763,21 +765,21 @@ onBeforeUnmount(() => {
 <template>
   <div v-if="MINECRAFT_2D_COMING_SOON" class="mc2d-wip">
     <header class="mc2d-top">
-      <button type="button" class="btn mc2d-back" @click="router.push('/games')">← Хаб</button>
+      <button type="button" class="btn mc2d-back" @click="router.push('/games')">← {{ t('mc2d.nav.hub') }}</button>
       <h1 class="mc2d-title">Minecraft 2D Online</h1>
     </header>
     <div class="mc2d-wip-card">
-      <h2 class="mc2d-wip-title">Игра в разработке</h2>
-      <p class="mc2d-wip-text">Minecraft 2D Online пока недоступна.</p>
-      <button type="button" class="btn btn-primary mc2d-bigbtn" @click="router.push('/games')">Вернуться в хаб</button>
+      <h2 class="mc2d-wip-title">{{ t('hub.status.inDevelopment') }}</h2>
+      <p class="mc2d-wip-text">{{ t('mc2d.wip.unavailable') }}</p>
+      <button type="button" class="btn btn-primary mc2d-bigbtn" @click="router.push('/games')">{{ t('mc2d.wip.backToHub') }}</button>
     </div>
   </div>
   <div v-else class="mc2d-root" :class="{ 'mc2d-root--motion': !reducedMotion }">
     <header class="mc2d-top">
-      <button type="button" class="btn mc2d-back" @click="router.push('/games')">← Хаб</button>
+      <button type="button" class="btn mc2d-back" @click="router.push('/games')">← {{ t('mc2d.nav.hub') }}</button>
       <h1 class="mc2d-title">Minecraft 2D Online</h1>
       <div class="mc2d-meta">
-        <span>Алмазы: {{ diamonds }}</span>
+        <span>{{ t('mc2d.hud.diamonds', { diamonds }) }}</span>
       </div>
     </header>
 
@@ -794,18 +796,18 @@ onBeforeUnmount(() => {
 
       <aside class="mc2d-panel">
         <div v-if="!inWorld" class="mc2d-lobby">
-          <p v-if="queuePos">Очередь: позиция {{ queuePos }}</p>
-          <p v-else>Лобби — нажмите «В мир», если есть слот (макс. 10).</p>
-          <button type="button" class="btn btn-primary mc2d-bigbtn" @click="joinWorld">В мир</button>
+          <p v-if="queuePos">{{ t('mc2d.lobby.queuePos', { pos: queuePos }) }}</p>
+          <p v-else>{{ t('mc2d.lobby.hint') }}</p>
+          <button type="button" class="btn btn-primary mc2d-bigbtn" @click="joinWorld">{{ t('mc2d.lobby.joinWorld') }}</button>
         </div>
         <div v-else>
-          <button type="button" class="btn mc2d-bigbtn" @click="leaveWorld">Выйти в лобби</button>
-          <p class="mc2d-depth">Глубина: {{ Math.max(0, Math.floor(Number(selfInfo?.y ?? 0))) }}</p>
+          <button type="button" class="btn mc2d-bigbtn" @click="leaveWorld">{{ t('mc2d.lobby.leaveToLobby') }}</button>
+          <p class="mc2d-depth">{{ t('mc2d.hud.depth', { depth: Math.max(0, Math.floor(Number(selfInfo?.y ?? 0))) }) }}</p>
         </div>
 
         <div class="mc2d-hud">
           <div class="mc2d-energy">
-            <span>Энергия копания</span>
+            <span>{{ t('mc2d.hud.stamina') }}</span>
             <div class="mc2d-bar">
               <div
                 class="mc2d-bar-fill"
@@ -813,17 +815,17 @@ onBeforeUnmount(() => {
               />
             </div>
           </div>
-          <p>Кирка: {{ selfInfo?.pickaxe ?? 0 }}</p>
+          <p>{{ t('mc2d.hud.pickaxe', { level: Number(selfInfo?.pickaxe ?? 0) }) }}</p>
           <div class="mc2d-dust-card">
             <div class="mc2d-dust-head">
-              <span class="mc2d-dust-title">Алмазная пыль</span>
+              <span class="mc2d-dust-title">{{ t('mc2d.hud.dustTitle') }}</span>
               <span class="mc2d-dust-value">{{ selfInfo?.dust ?? 0 }}</span>
             </div>
-            <p class="mc2d-dust-meta">Обмен: {{ selfInfo?.dust_rate ?? '?' }} за 1 алмаз GameHub</p>
+            <p class="mc2d-dust-meta">{{ t('mc2d.hud.exchangeRate', { rate: selfInfo?.dust_rate ?? '?' }) }}</p>
           </div>
           <div class="mc2d-loot">
             <div class="mc2d-loot-head">
-              <span>Добыча</span>
+              <span>{{ t('mc2d.hud.loot') }}</span>
               <span class="mc2d-loot-total">{{ totalLootCount }}</span>
             </div>
             <div class="mc2d-loot-grid">
@@ -868,10 +870,10 @@ onBeforeUnmount(() => {
             class="btn btn-primary"
             @click="teleportBasePaid"
           >
-            На базу (1 алмаз)
+            {{ t('mc2d.actions.basePaid') }}
           </button>
           <button v-if="inWorld && atBase()" type="button" class="btn" @click="openExchange">
-            Обмен 1 алмаз → алмазная пыль
+            {{ t('mc2d.actions.exchange') }}
           </button>
           <button
             v-if="inWorld && atBase() && smeltableTotal > 0"
@@ -879,11 +881,11 @@ onBeforeUnmount(() => {
             class="btn btn-primary mc2d-smelt-all"
             @click="smeltAll"
           >
-            Переработать всё → алмазная пыль
-            <span class="mc2d-smelt-detail">камень ×{{ smeltableStone }}, железо ×{{ smeltableIron }}</span>
+            {{ t('mc2d.actions.smeltAll') }}
+            <span class="mc2d-smelt-detail">{{ t('mc2d.actions.smeltDetail', { stone: smeltableStone, iron: smeltableIron }) }}</span>
           </button>
           <button v-if="Number(selfInfo?.inv?.apple ?? 0) > 0" type="button" class="btn" @click="eatApple">
-            Съесть яблоко (+{{ appleStaminaGain }} энергии)
+            {{ t('mc2d.actions.eatApple', { energy: appleStaminaGain }) }}
           </button>
           <button
             v-if="inWorld && atBase()"
@@ -892,21 +894,21 @@ onBeforeUnmount(() => {
             :disabled="!canBuyApple"
             @click="buyApple"
           >
-            Купить яблоко ({{ appleBuyDustCost }} алмазной пыли)
+            {{ t('mc2d.actions.buyApple', { dust: appleBuyDustCost }) }}
           </button>
           <button v-if="inWorld && atBase() && Number(selfInfo?.inv?.raw_diamond ?? 0) > 0" type="button" class="btn btn-primary" @click="deliverDiamond">
-            Сдать сырой алмаз (алмаз GameHub)
+            {{ t('mc2d.actions.deliverDiamond') }}
           </button>
         </div>
 
         <div v-if="escapePanel.show" class="mc2d-escape">
           <p v-if="escapePanel.pending" class="mc2d-escape-wait">
-            Телепорт через {{ escapeCountdownSec }} с… Инвентарь будет очищен.
+            {{ t('mc2d.escape.pending', { seconds: escapeCountdownSec }) }}
           </p>
           <template v-else-if="escapePanel.available">
-            <p class="mc2d-escape-title">Нужен выход наверх?</p>
-            <p v-if="escapePanel.gh >= 1" class="mc2d-escape-hint">Алмазы GameHub: {{ escapePanel.gh }}</p>
-            <p v-else class="mc2d-escape-hint">Алмазов нет — можно бесплатно, но инвентарь обнулится и ждать 10 с.</p>
+            <p class="mc2d-escape-title">{{ t('mc2d.escape.title') }}</p>
+            <p v-if="escapePanel.gh >= 1" class="mc2d-escape-hint">{{ t('mc2d.escape.ghDiamonds', { diamonds: escapePanel.gh }) }}</p>
+            <p v-else class="mc2d-escape-hint">{{ t('mc2d.escape.noDiamonds') }}</p>
             <div class="mc2d-escape-btns">
               <button
                 v-if="escapePanel.gh >= 1"
@@ -914,16 +916,17 @@ onBeforeUnmount(() => {
                 class="btn btn-primary mc2d-bigbtn"
                 @click="escapeSurfacePaid"
               >
-                Телепорт за 1 алмаз
+                {{ t('mc2d.escape.paid') }}
               </button>
-              <button type="button" class="btn mc2d-bigbtn" @click="escapeSurfaceFree">Бесплатно (10 с, без кармана)</button>
+              <button type="button" class="btn mc2d-bigbtn" @click="escapeSurfaceFree">{{ t('mc2d.escape.free') }}</button>
             </div>
           </template>
         </div>
 
         <p class="mc2d-hint">
-          A/D — ходьба, Space — прыжок, клик — копание, R — блок (1/2/3). «На базу» — телепорт к дому за 1 алмаз.
-          Позиция сохраняется при выходе.
+          {{ t('mc2d.hint.controls') }}
+          {{ ' ' }}
+          {{ t('mc2d.hint.persist') }}
         </p>
         <a class="mc2d-credits" href="/CREDITS_mc2d.md" target="_blank" rel="noopener">CREDITS</a>
       </aside>
@@ -932,12 +935,12 @@ onBeforeUnmount(() => {
     <Teleport to="body">
       <div v-if="showExchange" class="mc2d-modal-overlay" @click.self="showExchange = false">
         <div class="mc2d-modal">
-          <h3>Обмен алмаза на алмазную пыль</h3>
-          <p>Текущий курс: <strong>{{ selfInfo?.dust_rate }}</strong> алмазной пыли за 1 алмаз (8–20).</p>
-          <p>Баланс алмазов: {{ diamonds }}</p>
+          <h3>{{ t('mc2d.exchange.title') }}</h3>
+          <p>{{ t('mc2d.exchange.rate', { rate: selfInfo?.dust_rate ?? '?' }) }}</p>
+          <p>{{ t('mc2d.exchange.balance', { diamonds }) }}</p>
           <div class="mc2d-modal-actions">
-            <button type="button" class="btn" @click="showExchange = false">Отмена</button>
-            <button type="button" class="btn btn-primary" :disabled="diamonds < 1" @click="doExchange">Потратить 1 алмаз</button>
+            <button type="button" class="btn" @click="showExchange = false">{{ t('common.cancel') }}</button>
+            <button type="button" class="btn btn-primary" :disabled="diamonds < 1" @click="doExchange">{{ t('mc2d.exchange.spend') }}</button>
           </div>
         </div>
       </div>

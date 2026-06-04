@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
+import { mapApiError } from '../api/errors'
 import { playSfx, stopMusic } from '../audio/sound'
 import { startPresencePing, stopPresencePing } from '../telemetry/presence'
 
 const router = useRouter()
 const auth = useAuthStore()
+const { t } = useI18n()
 
 type ChatRow = {
   id: number
@@ -47,7 +50,7 @@ const toastErr = ref(false)
 let ws: WebSocket | null = null
 let toastTimer: number | null = null
 
-/** Популярные современные эмодзи для быстрой вставки в чат */
+/** Popular modern emojis for quick insert. */
 const MSG_EMOJIS = [
   '😂',
   '❤️',
@@ -80,7 +83,7 @@ const friendsSearchResults = ref<{ id: number; username: string }[]>([])
 const loadingFriends = ref(false)
 const showEmojiPicker = ref(false)
 const composerRef = ref<HTMLTextAreaElement | null>(null)
-/** Имена пользователей «в сети» по presence (как в /api/presence/summary). */
+/** Online usernames via presence (as in /api/presence/summary). */
 const presenceOnlineUsers = ref<string[]>([])
 let friendsPresenceTimer: number | null = null
 
@@ -179,7 +182,7 @@ async function openChat(c: ChatRow) {
   c.unread_count = 0
 }
 
-/** POST и WS оба присылают одно и то же сообщение — не дублируем по id */
+/** POST and WS may duplicate the same message — dedupe by id. */
 function appendMessageDedupe(chatId: number, row: MsgRow) {
   if (activeChatId.value !== chatId) return
   if (messages.value.some((m) => m.id === row.id)) return
@@ -219,7 +222,7 @@ function celebrateDiamondCredit(amount: number, balance?: number) {
   if (balance != null) auth.mergeOtherData({ diamonds: balance })
   void auth.refreshProfile()
   const n = Math.max(0, Math.floor(amount))
-  if (n > 0) showToast(`+${n} алмазов на счёт`)
+  if (n > 0) showToast(t('messenger.toasts.diamondsCredited', { amount: n }))
   launchDiamondFlyToHud()
   playSfx('diamond')
 }
@@ -259,7 +262,7 @@ async function sendText() {
     body: JSON.stringify({ text: t }),
   })
   if (!resp.ok) {
-    showToast('Не удалось отправить', true)
+    showToast(t('messenger.errors.sendFailed'), true)
     return
   }
   const data = (await resp.json()) as { message: MsgRow }
@@ -351,12 +354,12 @@ async function sendFriendRequest(username: string) {
   })
   const data = (await resp.json().catch(() => ({}))) as { status?: string; detail?: unknown }
   if (!resp.ok) {
-    showToast(typeof data.detail === 'string' ? data.detail : 'Не удалось отправить заявку', true)
+    showToast(typeof data.detail === 'string' ? data.detail : t('messenger.errors.requestFailed'), true)
     return
   }
-  if (data.status === 'already_friends') showToast('Уже в друзьях')
-  else if (data.status === 'already_pending') showToast('Заявка уже отправлена')
-  else showToast('Заявка отправлена')
+  if (data.status === 'already_friends') showToast(t('messenger.toasts.alreadyFriends'))
+  else if (data.status === 'already_pending') showToast(t('messenger.toasts.alreadyPending'))
+  else showToast(t('messenger.toasts.requestSent'))
   await loadFriendsData()
 }
 
@@ -368,10 +371,10 @@ async function acceptFriend(username: string) {
     body: JSON.stringify({ username }),
   })
   if (!resp.ok) {
-    showToast('Не удалось принять', true)
+    showToast(t('messenger.errors.acceptFailed'), true)
     return
   }
-  showToast('Добавлен в друзья')
+  showToast(t('messenger.toasts.friendAdded'))
   await loadFriendsData()
 }
 
@@ -382,7 +385,7 @@ async function removeFriendOrDecline(username: string) {
     headers: authHeaders(),
   })
   if (!resp.ok) {
-    showToast('Не удалось', true)
+    showToast(t('messenger.errors.genericFailed'), true)
     return
   }
   await loadFriendsData()
@@ -416,7 +419,7 @@ async function startDm(peerId: number) {
     body: JSON.stringify({ peer_user_id: peerId }),
   })
   if (!resp.ok) {
-    showToast('Не удалось открыть чат', true)
+    showToast(t('messenger.errors.openChatFailed'), true)
     return
   }
   const data = (await resp.json()) as { chat_id: number }
@@ -442,7 +445,7 @@ async function createGroup() {
     body: JSON.stringify({ title, member_ids: [] }),
   })
   if (!resp.ok) {
-    showToast('Не удалось создать группу', true)
+    showToast(t('messenger.errors.createGroupFailed'), true)
     return
   }
   const data = (await resp.json()) as { chat_id: number }
@@ -455,7 +458,7 @@ async function createGroup() {
 
 async function leaveActive() {
   const id = activeChatId.value
-  if (!id || !confirm('Выйти из этого чата?')) return
+  if (!id || !confirm(t('messenger.confirms.leaveChat'))) return
   playSfx('button')
   await fetch(`/api/messenger/chats/${id}/leave`, { method: 'POST', headers: authHeaders() })
   activeChatId.value = null
@@ -472,8 +475,8 @@ async function addMemberFromSearch(u: { id: number; username: string }) {
     headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ user_id: u.id }),
   })
-  if (!resp.ok) showToast('Не удалось добавить', true)
-  else showToast(`Добавлен: ${u.username}`)
+  if (!resp.ok) showToast(t('messenger.errors.addMemberFailed'), true)
+  else showToast(t('messenger.toasts.memberAdded', { username: u.username }))
   searchQ.value = ''
   searchResults.value = []
 }
@@ -490,24 +493,21 @@ async function confirmTransfer() {
   const toId = transferToId.value
   const raw = Math.floor(Number(transferAmount.value) || 0)
   if (raw < 3) {
-    showToast('Минимум 3 алмаза', true)
+    showToast(t('messenger.errors.minDiamonds'), true)
     return
   }
   const amount = raw
   if (!cid || !toId) return
   playSfx('button')
+  const idempotencyKey = crypto.randomUUID()
   const resp = await fetch('/api/messenger/transfer-diamonds', {
     method: 'POST',
     headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: cid, to_user_id: toId, amount }),
+    body: JSON.stringify({ chat_id: cid, to_user_id: toId, amount, idempotency_key: idempotencyKey }),
   })
   const data = (await resp.json().catch(() => ({}))) as { detail?: unknown; message?: MsgRow }
   if (!resp.ok) {
-    const d = data.detail as any
-    if (d && typeof d === 'object' && d.code === 'same_ip') {
-      showToast(String(d.message ?? 'Операция отклонена системой антимошенничества. Перевод между этими аккаунтами сейчас невозможен.'), true)
-    } else if (typeof d === 'string') showToast(d, true)
-    else showToast('Перевод не выполнен', true)
+    showToast(mapApiError(data.detail, t), true)
     return
   }
   showTransfer.value = false
@@ -543,7 +543,7 @@ function connectWs() {
       if (msg.type === 'friend.request') {
         void refreshFriendsPending()
         if (showFriendsModal.value) void loadFriendsData()
-        if (msg.from_username) showToast(`Заявка в друзья: ${msg.from_username}`)
+        if (msg.from_username) showToast(t('messenger.toasts.friendRequestFrom', { username: msg.from_username }))
       }
       if (msg.type === 'friend.accepted') {
         void refreshFriendsPending()
@@ -604,9 +604,9 @@ function displayBody(m: MsgRow): string {
     const uid = myUserId.value
     const amt = j.amount ?? '?'
     if (uid != null && j.to_user_id === uid) {
-      return `Вам перевели ${amt} алм.`
+      return t('messenger.system.transferToYou', { amount: amt })
     }
-    return `Перевод алмазов: ${amt} (комиссия ${j.commission ?? '?'})`
+    return t('messenger.system.transfer', { amount: amt, commission: j.commission ?? '?' })
   }
   return m.body
 }
@@ -615,31 +615,31 @@ function displayBody(m: MsgRow): string {
 <template>
   <main class="msg-page">
     <header class="msg-top">
-      <button type="button" class="btn msg-back" @click="backHub">← Хаб</button>
-      <h1 class="msg-title">Мессенджер</h1>
-      <span ref="diamondHudRef" class="msg-wallet" title="Баланс алмазов">💎 {{ diamonds }}</span>
+      <button type="button" class="btn msg-back" @click="backHub">← {{ t('messenger.nav.hub') }}</button>
+      <h1 class="msg-title">{{ t('messenger.title') }}</h1>
+      <span ref="diamondHudRef" class="msg-wallet" :title="t('messenger.walletTitle')">💎 {{ diamonds }}</span>
       <div class="msg-top-actions">
         <button type="button" class="btn msg-btn-friends" @click="openFriendsModal">
-          Друзья
+          {{ t('messenger.friends.title') }}
           <span
             v-if="friendsIncoming.length > 0"
             class="msg-friends-badge"
-            :aria-label="'Новых заявок: ' + friendsIncoming.length"
+            :aria-label="t('messenger.friends.incomingCount', { count: friendsIncoming.length })"
           >{{ friendsIncoming.length }}</span>
         </button>
-        <button type="button" class="btn" @click="showNewDm = true; searchQ = ''; searchResults = []; void runSearch()">Новый чат</button>
-        <button type="button" class="btn" @click="showCreateGroup = true">Группа</button>
+        <button type="button" class="btn" @click="showNewDm = true; searchQ = ''; searchResults = []; void runSearch()">{{ t('messenger.actions.newChat') }}</button>
+        <button type="button" class="btn" @click="showCreateGroup = true">{{ t('messenger.actions.group') }}</button>
       </div>
     </header>
 
     <div class="msg-encrypt-banner" aria-hidden="true">
       <span class="msg-lock" title="">🔒</span>
-      <span>Сообщения передаются по защищённому каналу.</span>
+      <span>{{ t('messenger.secureHint') }}</span>
     </div>
 
     <div class="msg-layout">
       <aside class="msg-col msg-chats">
-        <div v-if="loadingChats" class="msg-muted">Загрузка…</div>
+        <div v-if="loadingChats" class="msg-muted">{{ t('common.loading') }}</div>
         <button
           v-for="c in chats"
           :key="c.id"
@@ -649,7 +649,7 @@ function displayBody(m: MsgRow): string {
           @click="openChat(c)"
         >
           <div class="msg-chat-title">
-            {{ c.type === 'dm' ? (c.peer?.username ?? 'DM') : (c.title || 'Группа') }}
+            {{ c.type === 'dm' ? (c.peer?.username ?? 'DM') : (c.title || t('messenger.groupFallback')) }}
           </div>
           <div class="msg-chat-preview">{{ c.last_message_preview || '—' }}</div>
           <span v-if="c.unread_count > 0" class="msg-unread-badge">{{ c.unread_count }}</span>
@@ -661,15 +661,15 @@ function displayBody(m: MsgRow): string {
           <div class="msg-thread-head">
             <div>
               <b>{{ activeChat.type === 'dm' ? activeChat.peer?.username : activeChat.title }}</b>
-              <span v-if="activeChat.type === 'group'" class="msg-muted"> · группа</span>
+              <span v-if="activeChat.type === 'group'" class="msg-muted"> · {{ t('messenger.groupBadge') }}</span>
             </div>
             <div class="msg-thread-actions">
-              <button v-if="activeChat.type === 'dm'" type="button" class="btn btn-sm" @click="openTransferModal">Алмазы</button>
-              <button type="button" class="btn btn-sm btn-danger-ghost" @click="leaveActive">Выйти</button>
+              <button v-if="activeChat.type === 'dm'" type="button" class="btn btn-sm" @click="openTransferModal">{{ t('messenger.actions.diamonds') }}</button>
+              <button type="button" class="btn btn-sm btn-danger-ghost" @click="leaveActive">{{ t('messenger.actions.leave') }}</button>
             </div>
           </div>
           <div v-if="activeChat.type === 'group'" class="msg-add-row">
-            <input v-model="searchQ" class="msg-input" placeholder="Найти пользователя…" @input="runSearch" />
+            <input v-model="searchQ" class="msg-input" :placeholder="t('messenger.searchUserPlaceholder')" @input="runSearch" />
             <div v-if="searchResults.length" class="msg-search-dd">
               <button
                 v-for="u in searchResults"
@@ -695,7 +695,7 @@ function displayBody(m: MsgRow): string {
                   type="button"
                   class="btn btn-sm msg-emoji-btn"
                   :class="{ 'msg-emoji-btn--open': showEmojiPicker }"
-                  title="Эмодзи"
+                  :title="t('messenger.emoji.title')"
                   @click="showEmojiPicker = !showEmojiPicker"
                 >
                   😊
@@ -706,7 +706,7 @@ function displayBody(m: MsgRow): string {
                     :key="em"
                     type="button"
                     class="msg-emoji-cell"
-                    :aria-label="'Вставить ' + em"
+                    :aria-label="t('messenger.emoji.insert', { emoji: em })"
                     @click="insertEmoji(em)"
                   >
                     {{ em }}
@@ -718,15 +718,15 @@ function displayBody(m: MsgRow): string {
                 v-model="composerText"
                 class="msg-textarea"
                 rows="2"
-                placeholder="Сообщение…"
+                :placeholder="t('messenger.messagePlaceholder')"
                 @keydown.enter.exact.prevent="sendText"
                 @focus="showEmojiPicker = false"
               />
             </div>
-            <button type="button" class="btn" :disabled="!composerText.trim()" @click="sendText">Отправить</button>
+            <button type="button" class="btn" :disabled="!composerText.trim()" @click="sendText">{{ t('messenger.actions.send') }}</button>
           </div>
         </template>
-        <div v-else class="msg-placeholder">Выберите чат слева или создайте новый.</div>
+        <div v-else class="msg-placeholder">{{ t('messenger.emptyThread') }}</div>
       </section>
     </div>
 
@@ -738,17 +738,17 @@ function displayBody(m: MsgRow): string {
       <div v-if="showFriendsModal" class="msg-modal-bg" @click.self="showFriendsModal = false">
         <div class="msg-modal msg-modal--wide msg-modal--friends">
           <div class="msg-modal-friends-head">
-            <h3>Друзья</h3>
-            <p class="msg-muted msg-modal-friends-hint">Сначала список друзей; заявки и поиск — ниже.</p>
+            <h3>{{ t('messenger.friends.title') }}</h3>
+            <p class="msg-muted msg-modal-friends-hint">{{ t('messenger.friends.hint') }}</p>
           </div>
 
           <template v-if="loadingFriends">
-            <p class="msg-muted">Загрузка…</p>
+            <p class="msg-muted">{{ t('common.loading') }}</p>
           </template>
           <template v-else>
-            <section class="msg-friends-primary" aria-label="Список друзей">
-              <h4 class="msg-subhead msg-subhead--primary">Мои друзья</h4>
-              <p v-if="!friendsList.length" class="msg-muted msg-subempty">Пока никого нет — пригласите через заявки ниже.</p>
+            <section class="msg-friends-primary" :aria-label="t('messenger.friends.listAria')">
+              <h4 class="msg-subhead msg-subhead--primary">{{ t('messenger.friends.myFriends') }}</h4>
+              <p v-if="!friendsList.length" class="msg-muted msg-subempty">{{ t('messenger.friends.empty') }}</p>
               <div v-else class="msg-friends-scroll">
                 <div v-for="u in friendsSortedForDisplay" :key="'fr' + u.id" class="msg-friend-row msg-friend-row--main">
                   <div class="msg-friend-identity">
@@ -757,15 +757,15 @@ function displayBody(m: MsgRow): string {
                       :class="
                         presenceOnlineUsers.includes(u.username) ? 'msg-presence-dot--on' : 'msg-presence-dot--off'
                       "
-                      :title="presenceOnlineUsers.includes(u.username) ? 'В сети' : 'Не в сети'"
+                      :title="presenceOnlineUsers.includes(u.username) ? t('messenger.presence.online') : t('messenger.presence.offline')"
                       aria-hidden="true"
                     />
                     <span class="msg-friend-name">{{ u.username }}</span>
                   </div>
                   <div class="msg-friend-actions">
-                    <button type="button" class="btn btn-sm" @click="startDm(u.id)">Написать</button>
+                    <button type="button" class="btn btn-sm" @click="startDm(u.id)">{{ t('messenger.actions.write') }}</button>
                     <button type="button" class="btn btn-sm btn-danger-ghost" @click="removeFriendOrDecline(u.username)">
-                      Удалить
+                      {{ t('messenger.actions.delete') }}
                     </button>
                   </div>
                 </div>
@@ -774,45 +774,45 @@ function displayBody(m: MsgRow): string {
 
             <details class="msg-friends-secondary">
               <summary class="msg-friends-secondary-summary">
-                <span class="msg-friends-secondary-title">Заявки и добавление в друзья</span>
+                <span class="msg-friends-secondary-title">{{ t('messenger.friends.requestsTitle') }}</span>
                 <span v-if="friendsIncoming.length" class="msg-friends-badge msg-friends-badge--inline">{{
                   friendsIncoming.length
                 }}</span>
               </summary>
               <div class="msg-friends-secondary-body">
-                <h4 class="msg-subhead">Входящие заявки</h4>
-                <div v-if="!friendsIncoming.length" class="msg-muted msg-subempty">Нет новых заявок</div>
+                <h4 class="msg-subhead">{{ t('messenger.friends.incoming') }}</h4>
+                <div v-if="!friendsIncoming.length" class="msg-muted msg-subempty">{{ t('messenger.friends.noIncoming') }}</div>
                 <div v-for="u in friendsIncoming" :key="'in' + u.id" class="msg-friend-row">
                   <span class="msg-friend-name">{{ u.username }}</span>
                   <div class="msg-friend-actions">
-                    <button type="button" class="btn btn-sm" @click="acceptFriend(u.username)">Принять</button>
+                    <button type="button" class="btn btn-sm" @click="acceptFriend(u.username)">{{ t('messenger.actions.accept') }}</button>
                     <button type="button" class="btn btn-sm btn-danger-ghost" @click="removeFriendOrDecline(u.username)">
-                      Отклонить
+                      {{ t('messenger.actions.decline') }}
                     </button>
                   </div>
                 </div>
 
-                <h4 class="msg-subhead">Исходящие заявки</h4>
-                <div v-if="!friendsOutgoing.length" class="msg-muted msg-subempty">Нет</div>
+                <h4 class="msg-subhead">{{ t('messenger.friends.outgoing') }}</h4>
+                <div v-if="!friendsOutgoing.length" class="msg-muted msg-subempty">{{ t('messenger.friends.none') }}</div>
                 <div v-for="u in friendsOutgoing" :key="'out' + u.id" class="msg-friend-row">
                   <span class="msg-friend-name">{{ u.username }}</span>
                   <button type="button" class="btn btn-sm btn-danger-ghost" @click="removeFriendOrDecline(u.username)">
-                    Отменить
+                    {{ t('messenger.actions.cancel') }}
                   </button>
                 </div>
 
-                <h4 class="msg-subhead">Поиск по нику</h4>
+                <h4 class="msg-subhead">{{ t('messenger.friends.searchTitle') }}</h4>
                 <input
                   v-model="friendsSearchQ"
                   class="msg-input"
-                  placeholder="Введите ник…"
+                  :placeholder="t('messenger.friends.searchPlaceholder')"
                   @input="runFriendsSearch"
                 />
                 <div v-if="friendsSearchResults.length" class="msg-modal-list msg-modal-list--friends-search">
                   <div v-for="u in friendsSearchResults" :key="'fs' + u.id" class="msg-modal-row msg-modal-row--split">
                     <span class="msg-modal-row-main msg-modal-row-text">{{ u.username }}</span>
                     <button type="button" class="btn btn-sm msg-modal-row-side" @click="sendFriendRequest(u.username)">
-                      Заявка
+                      {{ t('messenger.actions.request') }}
                     </button>
                   </div>
                 </div>
@@ -820,7 +820,7 @@ function displayBody(m: MsgRow): string {
             </details>
           </template>
 
-          <button type="button" class="btn" @click="showFriendsModal = false">Закрыть</button>
+          <button type="button" class="btn" @click="showFriendsModal = false">{{ t('common.close') }}</button>
         </div>
       </div>
     </Teleport>
@@ -828,17 +828,17 @@ function displayBody(m: MsgRow): string {
     <Teleport to="body">
       <div v-if="showNewDm" class="msg-modal-bg" @click.self="showNewDm = false">
         <div class="msg-modal">
-          <h3>Новый личный чат</h3>
-          <input v-model="searchQ" class="msg-input" placeholder="Никнейм…" @input="runSearch" />
+          <h3>{{ t('messenger.modals.newDmTitle') }}</h3>
+          <input v-model="searchQ" class="msg-input" :placeholder="t('messenger.modals.nicknamePlaceholder')" @input="runSearch" />
           <div class="msg-modal-list">
             <div v-for="u in searchResults" :key="u.id" class="msg-modal-row msg-modal-row--split">
               <button type="button" class="msg-modal-row-main" @click="startDm(u.id)">{{ u.username }}</button>
               <button type="button" class="btn btn-sm msg-modal-row-side" @click.stop="sendFriendRequest(u.username)">
-                В друзья
+                {{ t('messenger.actions.addFriend') }}
               </button>
             </div>
           </div>
-          <button type="button" class="btn" @click="showNewDm = false">Закрыть</button>
+          <button type="button" class="btn" @click="showNewDm = false">{{ t('common.close') }}</button>
         </div>
       </div>
     </Teleport>
@@ -846,11 +846,11 @@ function displayBody(m: MsgRow): string {
     <Teleport to="body">
       <div v-if="showCreateGroup" class="msg-modal-bg" @click.self="showCreateGroup = false">
         <div class="msg-modal">
-          <h3>Новая группа</h3>
-          <input v-model="groupTitle" class="msg-input" placeholder="Название" />
-          <p class="msg-muted">Участников можно добавить после создания (поиск в шапке чата).</p>
-          <button type="button" class="btn" :disabled="!groupTitle.trim()" @click="createGroup">Создать</button>
-          <button type="button" class="btn" @click="showCreateGroup = false">Отмена</button>
+          <h3>{{ t('messenger.modals.newGroupTitle') }}</h3>
+          <input v-model="groupTitle" class="msg-input" :placeholder="t('messenger.modals.groupNamePlaceholder')" />
+          <p class="msg-muted">{{ t('messenger.modals.groupHint') }}</p>
+          <button type="button" class="btn" :disabled="!groupTitle.trim()" @click="createGroup">{{ t('messenger.actions.create') }}</button>
+          <button type="button" class="btn" @click="showCreateGroup = false">{{ t('common.cancel') }}</button>
         </div>
       </div>
     </Teleport>
@@ -858,19 +858,19 @@ function displayBody(m: MsgRow): string {
     <Teleport to="body">
       <div v-if="showTransfer" class="msg-modal-bg" @click.self="showTransfer = false">
         <div class="msg-modal">
-          <h3>Перевод алмазов</h3>
+          <h3>{{ t('messenger.modals.transferTitle') }}</h3>
           <p class="msg-muted">
-            Получит друг:
+            {{ t('messenger.transfer.preview.receiver') }}
             <b>{{ transferPreviewOk ? transferInputInt : '—' }}</b>
-            , комиссия 20%: <b>{{ transferPreviewOk ? transferFee : '—' }}</b>, списание:
+            , {{ t('messenger.transfer.preview.fee', { pct: 20 }) }}: <b>{{ transferPreviewOk ? transferFee : '—' }}</b>, {{ t('messenger.transfer.preview.total') }}:
             <b>{{ transferPreviewOk ? transferTotal : '—' }}</b>
           </p>
-          <p v-if="!transferPreviewOk" class="msg-muted" style="margin: 0 0 4px">Минимум 3 алмаза к получателю.</p>
-          <label class="msg-label">Сумма (целое, от 3)</label>
+          <p v-if="!transferPreviewOk" class="msg-muted" style="margin: 0 0 4px">{{ t('messenger.transfer.minHint', { min: 3 }) }}</p>
+          <label class="msg-label">{{ t('messenger.transfer.amountLabel', { min: 3 }) }}</label>
           <input v-model.number="transferAmount" type="number" min="3" step="1" class="msg-input" />
           <div class="msg-modal-actions">
-            <button type="button" class="btn" @click="confirmTransfer">Перевести</button>
-            <button type="button" class="btn" @click="showTransfer = false">Отмена</button>
+            <button type="button" class="btn" @click="confirmTransfer">{{ t('messenger.actions.transfer') }}</button>
+            <button type="button" class="btn" @click="showTransfer = false">{{ t('common.cancel') }}</button>
           </div>
         </div>
       </div>

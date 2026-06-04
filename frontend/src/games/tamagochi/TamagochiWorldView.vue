@@ -12,23 +12,35 @@ import {
   tamagochiEndVisit,
   tamagochiExchange,
   tamagochiHealCoins,
+  tamagochiHistory,
   tamagochiMe,
+  tamagochiRecreate,
   tamagochiShop,
   type PetType
 } from './api'
 import { useTamagochiSocket } from './useTamagochiSocket'
+import { useI18n } from 'vue-i18n'
+import { mapApiError } from '../../api/errors'
+import { i18n } from '../../i18n'
 
 const GAME_KEY = 'tamagochi_world_game'
 
 const router = useRouter()
 const auth = useAuthStore()
+const { t } = useI18n()
 
 const loading = ref(true)
 const adoptType = ref<PetType>('cat')
+const petNameInput = ref('')
+const petHistory = ref<any[]>([])
+const recreateBusy = ref(false)
 const error = ref<string | null>(null)
-/** После adopt: REST уже с питомцем, мир подтягивает его по WS — показываем лоадер на карте. */
+/** After adopt: REST has pet, WS world sync may lag. */
 const waitingPetWorldSync = ref(false)
 const adoptBusy = ref(false)
+const showRecreateConfirm = ref(false)
+const recreateFlow = ref(false)
+const preferRestPetId = ref<string | null>(null)
 
 const me = ref<any>(null)
 const shop = ref<any>(null)
@@ -69,7 +81,7 @@ function computeEncounterProgress(p: any): EncounterHud | null {
   const dur = act === 'fighting' ? fightMs : playMs
   const start = end - dur
   const pct = Math.max(0, Math.min(100, ((tickNow.value - start) / dur) * 100))
-  const label = act === 'fighting' ? 'Драка' : 'Игра с другим'
+  const label = act === 'fighting' ? t('tama.encounter.fight') : t('tama.encounter.play')
   const kind: 'play' | 'fight' = act === 'fighting' ? 'fight' : 'play'
   return { pct, kind, label }
 }
@@ -84,44 +96,43 @@ const myEncounterProgress = computed((): EncounterHud | null => {
 
 const PET_TYPES: PetType[] = ['cat', 'dog', 'pokemon', 'capybara', 'alien']
 
-const PET_LABEL_RU: Record<PetType, string> = {
-  cat: 'Кот',
-  dog: 'Собака',
-  pokemon: 'Покемон',
-  capybara: 'Капибара',
-  alien: 'Пришелец'
+function petTypeLabel(type: string): string {
+  const k = String(type || '')
+  const key = `tama.petTypes.${k}`
+  const v = t(key)
+  return v && v !== key ? v : k
 }
 
-/** Подписи к покупке еды по типу питомца */
-const PET_FOOD_FOR_RU: Record<PetType, string> = {
-  cat: 'для кота',
-  dog: 'для собаки',
-  pokemon: 'для покемона',
-  capybara: 'для капибары',
-  alien: 'для пришельца'
+function foodForLabel(type: string): string {
+  const k = String(type || '')
+  const key = `tama.foodFor.${k}`
+  const v = t(key)
+  return v && v !== key ? v : k
 }
 
-const ACTIVITY_RU: Record<string, string> = {
-  wandering: 'гуляет',
-  moving: 'идёт',
-  sleeping: 'спит',
-  fighting: 'Драка',
-  playing_with_other: 'играет с другим',
-  eating_map_food: 'ест с земли',
-  digging: 'роет',
-  hunting: 'охотится',
-  sparking: 'искрит',
-  relaxing: 'отдыхает',
-  scanning: 'сканирует',
-  exploring: 'исследует'
-}
-
-function activityRu(code: string | undefined): string {
+function activityLabel(code: string | undefined): string {
   const k = String(code ?? '')
-  return ACTIVITY_RU[k] ?? (k || '—')
+  if (!k) return t('tama.units.dash')
+  const key = `tama.activities.${k}`
+  const v = t(key)
+  return v && v !== key ? v : k
 }
 
-const myPet = computed(() => mePet.value ?? me.value?.pet ?? null)
+const myPet = computed(() => {
+  if (recreateFlow.value) return null
+  const rest = me.value?.pet ?? null
+  const ws = mePet.value ?? null
+  if (preferRestPetId.value) {
+    if (rest && String(rest.pet_id ?? '') === preferRestPetId.value) return rest
+    if (ws && String(ws.pet_id ?? '') === preferRestPetId.value) {
+      preferRestPetId.value = null
+      return ws
+    }
+    // me.pet from REST has pet_id; WS map payload does not — prefer REST until WS catches up.
+    return rest
+  }
+  return ws ?? rest
+})
 const hasPet = computed(() => !!myPet.value)
 
 const coinsWallet = computed(() => Number(shop.value?.wallet?.coins ?? 0))
@@ -134,6 +145,7 @@ const canBuyToy = computed(() => toyCoinCost.value > 0 && coinsWallet.value >= t
 const HEAL_HP_COST_COINS = 30
 const PLAY_ACTION_COINS_COST = 25
 const SLEEP_ACTION_COINS_COST = 10
+const RECREATE_PET_COINS_COST = 50
 
 const diamondsBalance = computed(() => Number((auth.otherData as any).diamonds ?? 0))
 const canExchangeOneDiamond = computed(() => diamondsBalance.value >= 1 && exchangeRate.value > 0)
@@ -158,7 +170,7 @@ const foodCountForPet = computed(() => {
   return Number(foodByType.value[t] ?? 0)
 })
 
-/** Имена файлов в backend/app/games/tamagochi_world/pictures/ (как у тебя на диске) */
+/** Filenames in backend/app/games/tamagochi_world/pictures/. */
 const FOOD_FILE: Record<PetType, string> = {
   cat: 'cat_food.png',
   dog: 'dog_food.png',
@@ -197,11 +209,40 @@ const bars = computed(() => {
 
 const diamondMeta = computed(() => wsPayload.value?.me?.diamond_info ?? null)
 
+function petLabel(p: any): string {
+  const name = String(p?.pet_name ?? '').trim()
+  if (name) return name
+  return String(p?.owner ?? '')
+}
+
+function petSubLabel(p: any): string | null {
+  const name = String(p?.pet_name ?? '').trim()
+  if (name) return String(p?.owner ?? '')
+  return null
+}
+
+function fmtHistoryAge(sec: number): string {
+  const d = Math.floor(sec / 86400)
+  if (d >= 1) return t('tama.units.daysShort', { n: d })
+  const h = Math.floor(sec / 3600)
+  if (h >= 1) return t('tama.units.hoursShort', { n: h })
+  return t('tama.units.minutesShort', { n: Math.max(1, Math.floor(sec / 60)) })
+}
+
+async function loadHistory() {
+  try {
+    const data = await tamagochiHistory(auth.token)
+    petHistory.value = data.history ?? []
+  } catch {
+    petHistory.value = []
+  }
+}
+
 function fmtToyPassiveHours(h: number): string {
-  if (!Number.isFinite(h) || h <= 0) return '—'
-  if (h >= 48) return `${Math.round(h / 24)} сут.`
-  if (h >= 1) return `${h.toFixed(1)} ч`
-  return `${Math.max(1, Math.round(h * 60))} мин`
+  if (!Number.isFinite(h) || h <= 0) return t('tama.units.dash')
+  if (h >= 48) return t('tama.units.daysShort', { n: Math.round(h / 24) })
+  if (h >= 1) return t('tama.units.hours', { n: Number(h.toFixed(1)) })
+  return t('tama.units.minutesShort', { n: Math.max(1, Math.round(h * 60)) })
 }
 
 const canHealWithCoins = computed(
@@ -267,7 +308,13 @@ async function adopt() {
   waitingPetWorldSync.value = false
   adoptBusy.value = true
   try {
-    await tamagochiAdopt(auth.token, adoptType.value)
+    if (recreateFlow.value) {
+      const res = await tamagochiRecreate(auth.token, adoptType.value, petNameInput.value)
+      preferRestPetId.value = String((res as any)?.pet?.pet_id ?? '')
+      recreateFlow.value = false
+    } else {
+      await tamagochiAdopt(auth.token, adoptType.value, petNameInput.value)
+    }
     await Promise.all([loadMe(), loadShop()])
     if (mePet.value != null && mePet.value.alive !== false) {
       return
@@ -279,11 +326,34 @@ async function adopt() {
       waitingPetWorldSync.value = false
     }
   } catch (e: any) {
-    error.value = String(e?.message ?? e)
+    const body = e?.body as { detail?: unknown } | undefined
+    error.value = mapApiError(body?.detail ?? e?.message, t)
     waitingPetWorldSync.value = false
   } finally {
     adoptBusy.value = false
   }
+}
+
+async function recreatePet() {
+  if (recreateBusy.value || !hasPet.value) return
+  playSfx('button')
+  showRecreateConfirm.value = true
+}
+
+async function confirmRecreatePet() {
+  if (recreateBusy.value || !hasPet.value) return
+  playSfx('button')
+  // Switch UI to the initial pet selection screen.
+  // The actual /recreate happens after user picks type/name and taps Adopt.
+  showRecreateConfirm.value = false
+  recreateFlow.value = true
+  waitingPetWorldSync.value = false
+  petNameInput.value = ''
+  adoptType.value = 'cat'
+}
+
+function cancelRecreatePet() {
+  showRecreateConfirm.value = false
 }
 
 async function act(type: 'feed' | 'play' | 'sleep' | 'wake') {
@@ -338,8 +408,7 @@ async function buyToyOne() {
   try {
     await tamagochiBuy(auth.token, 'toy', 1)
     await loadShop()
-    shopSuccess.value =
-      'Игрушка активна: настроение падает медленнее (~24 ч с покупки, суммируется), буст частоты поиска алмазов — 10 минут (суммируется). Смотри блок «Поиск алмазов» слева.'
+    shopSuccess.value = t('tama.shop.toySuccess')
     window.setTimeout(() => {
       shopSuccess.value = ''
     }, 8000)
@@ -377,7 +446,8 @@ function pickupStyle(pk: any) {
   return petStyle({ pos: pk?.pos })
 }
 
-const petsToRender = computed(() => pets.value)
+// WS map pets are keyed by owner and do not include pet_id — do not filter by pet_id here.
+const petsToRender = computed(() => (pets.value ?? []) as any[])
 const pickupsToRender = computed(() => pickups.value ?? [])
 
 const fx = ref<Array<{ id: string; kind: string; x: number; y: number; owner?: string }>>([])
@@ -445,7 +515,7 @@ onMounted(async () => {
   await auth.refreshProfile()
   startHeartbeat(auth.token, GAME_KEY)
   startPresencePing(auth.token, GAME_KEY)
-  await Promise.all([loadMe(), loadShop()])
+  await Promise.all([loadMe(), loadShop(), loadHistory()])
   loading.value = false
   const t = window.setInterval(handleEvents, 300)
   const ui = window.setInterval(() => {
@@ -472,6 +542,13 @@ function exit() {
 
 const showGuide = ref(false)
 
+const guideSections = computed(() => {
+  const loc = i18n.global.locale.value
+  const msg = i18n.global.getLocaleMessage(loc) as any
+  const raw = msg?.tama?.guideSections
+  return Array.isArray(raw) ? (raw as Array<{ title?: string; html?: string }>) : []
+})
+
 function openGuide() {
   playSfx('button')
   showGuide.value = true
@@ -486,16 +563,16 @@ function closeGuide() {
   <main class="page page-menu">
     <section v-if="lastError" class="panel tamagochi-ws-full">
       <div class="tamagochi-alert tamagochi-alert--blocking">
-        <p class="tamagochi-ws-error-title">Подключение к полю</p>
+        <p class="tamagochi-ws-error-title">{{ t('tama.ws.connectingTitle') }}</p>
         <p>{{ lastError }}</p>
-        <button type="button" class="btn" style="margin-top: 12px; height: 44px" @click="exit">К играм</button>
+        <button type="button" class="btn" style="margin-top: 12px; height: 44px" @click="exit">{{ t('tama.backToGames') }}</button>
       </div>
     </section>
     <section v-else class="panel panel-tamagochi" style="display:flex; gap:12px; align-items:stretch;">
       <aside class="tamagochi-aside">
         <div class="tamagochi-head-row">
-          <h3 class="tamagochi-title">Тамагочи World</h3>
-          <button type="button" class="btn btn-guide-tiny" @click="openGuide">Обучение</button>
+          <h3 class="tamagochi-title">{{ t('tama.title') }}</h3>
+          <button type="button" class="btn btn-guide-tiny" @click="openGuide">{{ t('tama.guide') }}</button>
         </div>
         <div style="display:grid; gap:10px;">
           <div v-if="error" class="tamagochi-alert">
@@ -503,128 +580,138 @@ function closeGuide() {
           </div>
 
           <template v-if="!loading && !hasPet">
-            <div style="opacity:0.9;">У тебя нет питомца. Выбери тип и нажми «Завести».</div>
-            <div class="pet-type-picker" role="group" aria-label="Тип питомца" :class="{ 'pet-type-picker--disabled': adoptBusy }">
+            <div style="opacity:0.9;">{{ t('tama.noPet') }}</div>
+            <div class="pet-type-picker" role="group" :aria-label="t('tama.adoptTypeAria')" :class="{ 'pet-type-picker--disabled': adoptBusy }">
               <button
-                v-for="t in PET_TYPES"
-                :key="'adopt-' + t"
+                v-for="pt in PET_TYPES"
+                :key="'adopt-' + pt"
                 type="button"
                 class="pet-type-card"
                 :disabled="adoptBusy"
-                :class="{ 'pet-type-card--selected': adoptType === t }"
-                :aria-pressed="adoptType === t"
-                @click="adoptType = t"
+                :class="{ 'pet-type-card--selected': adoptType === pt }"
+                :aria-pressed="adoptType === pt"
+                @click="adoptType = pt"
               >
-                <span class="pet-type-card-avatar" :class="'avatar-bg-' + t">
+                <span class="pet-type-card-avatar" :class="'avatar-bg-' + pt">
                   <img
                     class="pet-type-card-img"
-                    :src="pictureAvatar(t)"
-                    :alt="PET_LABEL_RU[t]"
+                    :src="pictureAvatar(pt)"
+                    :alt="petTypeLabel(pt)"
                     @error="($event.target as HTMLImageElement).style.visibility = 'hidden'"
                   />
                 </span>
-                <span class="pet-type-card-name">{{ PET_LABEL_RU[t] }}</span>
+                <span class="pet-type-card-name">{{ petTypeLabel(pt) }}</span>
               </button>
             </div>
+            <label class="tama-pet-name-field">
+              <span>{{ t('tama.petName') }}</span>
+              <input v-model="petNameInput" type="text" maxlength="32" class="tama-pet-name-input" :disabled="adoptBusy" />
+            </label>
             <button class="btn" :disabled="adoptBusy" @click="adopt" style="height: 44px;">
-              {{ adoptBusy ? 'Подождите…' : 'Завести питомца' }}
+              {{ adoptBusy ? t('common.loading') : t('tama.adopt') }}
             </button>
           </template>
 
           <template v-else>
             <div style="display:grid; gap:8px;">
-              <div style="opacity:0.9;"><b>Состояние</b>: {{ activityRu(hud.activity) }}</div>
+              <div style="opacity:0.9;"><b>{{ t('tama.status') }}</b>: {{ activityLabel(hud.activity) }}</div>
 
               <div>
                 <div class="stat-row">
-                  <span><b>Здоровье</b></span><span>{{ bars.hp }}%</span>
+                  <span><b>{{ t('tama.stats.hp') }}</b></span><span>{{ bars.hp }}%</span>
                 </div>
                 <div class="bar"><div class="fill hp" :style="{ width: `${bars.hp}%` }"></div></div>
               </div>
               <div>
                 <div class="stat-row">
-                  <span><b>Сытость</b></span><span>{{ bars.fullness }}%</span>
+                  <span><b>{{ t('tama.stats.fullness') }}</b></span><span>{{ bars.fullness }}%</span>
                 </div>
                 <div class="bar"><div class="fill food" :style="{ width: `${bars.fullness}%` }"></div></div>
               </div>
               <div>
                 <div class="stat-row">
-                  <span><b>Настроение</b></span><span>{{ bars.mood }}%</span>
+                  <span><b>{{ t('tama.stats.mood') }}</b></span><span>{{ bars.mood }}%</span>
                 </div>
                 <div class="bar"><div class="fill mood" :style="{ width: `${bars.mood}%` }"></div></div>
               </div>
               <div>
                 <div class="stat-row">
-                  <span><b>Бодрость</b></span><span>{{ bars.energy }}%</span>
+                  <span><b>{{ t('tama.stats.energy') }}</b></span><span>{{ bars.energy }}%</span>
                 </div>
                 <div class="bar"><div class="fill energy" :style="{ width: `${bars.energy}%` }"></div></div>
               </div>
 
               <div v-if="diamondMeta" class="tama-diamond-panel">
-                <div class="tama-diamond-panel-title">Поиск алмазов на карте</div>
+                <div class="tama-diamond-panel-title">{{ t('tama.diamondsOnMap') }}</div>
                 <template v-if="diamondMeta.blocked">
                   <p class="tama-diamond-panel-muted">
-                    Сейчас не запускается: среднее самочувствие по четырём шкалам ниже порога
-                    ({{ diamondMeta.avg_wellbeing ?? '—' }}%; нужно примерно от 38%). Корми, дай выспаться и подними настроение.
+                    {{ t('tama.diamondBlocked', { avg: diamondMeta.avg_wellbeing ?? '—' }) }}
                   </p>
                 </template>
                 <template v-else>
                   <div class="tama-diamond-pace-row">
-                    <span>Активность поиска</span>
+                    <span>{{ t('tama.searchActivity') }}</span>
                     <span class="tama-diamond-pace-num">{{ diamondMeta.pace_percent }}%</span>
                   </div>
                   <div class="bar tama-diamond-pace-bar">
                     <div class="fill tama-diamond-pace-fill" :style="{ width: `${diamondMeta.pace_percent}%` }"></div>
                   </div>
                   <p class="tama-diamond-hint">
-                    Чем выше шкала, тем чаще питомец может начинать поиск. Ориентир паузы между попытками в среднем
-                    <b>~{{ diamondMeta.estimated_cooldown_minutes ?? '—' }}</b> мин (есть случайный разброс).
+                    {{ t('tama.searchActivityHint', { minutes: diamondMeta.estimated_cooldown_minutes ?? '—' }) }}
+                  </p>
+                  <p v-if="diamondMeta.pet_age_days != null" class="tama-diamond-hint">
+                    {{ t('tama.ageDays', { days: diamondMeta.pet_age_days }) }} —
+                    {{ t('tama.bestDiamondRate', { minutes: diamondMeta.best_diamond_interval_minutes ?? '—' }) }}
                   </p>
                 </template>
                 <div
                   v-if="diamondMeta.toy_passive_hours_left != null && diamondMeta.toy_passive_hours_left > 0"
                   class="tama-toy-line"
                 >
-                  🧸 Игрушка (настроение): ещё <b>{{ fmtToyPassiveHours(diamondMeta.toy_passive_hours_left) }}</b>
+                  🧸 {{ t('tama.toyPassiveLeft') }} <b>{{ fmtToyPassiveHours(diamondMeta.toy_passive_hours_left) }}</b>
                 </div>
                 <div
                   v-if="diamondMeta.toy_diamond_boost && diamondMeta.toy_diamond_minutes_left != null"
                   class="tama-toy-line tama-toy-line--boost"
                 >
-                  ✦ Буст поиска алмазов: ещё <b>{{ Math.max(1, Math.ceil(diamondMeta.toy_diamond_minutes_left)) }} мин</b>
+                  ✦ {{ t('tama.toyDiamondBoostLeft') }}
+                  <b>{{ t('tama.units.minutesShort', { n: Math.max(1, Math.ceil(diamondMeta.toy_diamond_minutes_left)) }) }}</b>
                 </div>
               </div>
 
-              <div style="opacity:0.85; font-size:12px;">Спит: {{ hud.sleeping ? 'да' : 'нет' }}</div>
+              <div style="opacity:0.85; font-size:12px;">
+                {{ t('tama.sleeping') }}: {{ hud.sleeping ? t('common.yes') : t('common.no') }}
+              </div>
             </div>
 
             <div style="display:grid; gap:8px; margin-top:10px;">
               <button class="btn" :disabled="foodCountForPet <= 0" @click="act('feed')" style="height: 44px;">
-                Покормить <span style="opacity:0.8;">({{ PET_FOOD_FOR_RU[String(myPet?.type) as PetType] ?? myPet?.type }}: {{ foodCountForPet }} шт.)</span>
+                {{ t('tama.actions.feed') }}
+                <span style="opacity:0.8;">({{ foodForLabel(String(myPet?.type)) }}: {{ foodCountForPet }} {{ t('tama.units.pcs') }})</span>
               </button>
               <div class="tama-play-heal-row">
                 <button class="btn" :disabled="!canPlayWithCoins" @click="act('play')" style="height: 44px;">
-                  Поиграть ({{ PLAY_ACTION_COINS_COST }} 🪙)
+                  {{ t('tama.actions.play', { coins: PLAY_ACTION_COINS_COST }) }}
                 </button>
                 <button
                   class="btn btn-heal"
                   :disabled="!canHealWithCoins"
                   style="height: 44px;"
-                  title="Добавляет 10% к шкале HP"
+                  :title="t('tama.actions.healHint')"
                   @click="healHpCoins"
                 >
-                  +10% HP ({{ HEAL_HP_COST_COINS }} 🪙)
+                  {{ t('tama.actions.heal', { coins: HEAL_HP_COST_COINS }) }}
                 </button>
               </div>
               <button class="btn" :disabled="!canSleepWithCoins" @click="act('sleep')" style="height: 44px;">
-                Уложить спать ({{ SLEEP_ACTION_COINS_COST }} 🪙)
+                {{ t('tama.actions.sleep', { coins: SLEEP_ACTION_COINS_COST }) }}
               </button>
-              <button class="btn" @click="act('wake')" style="height: 44px;">Разбудить</button>
+              <button class="btn" @click="act('wake')" style="height: 44px;">{{ t('tama.actions.wake') }}</button>
             </div>
 
             <div class="shop-wrap">
-              <h4 class="shop-heading">Магазин</h4>
-              <p class="shop-lead">Один тап — одна покупка. Расчёт в <b>монетах</b>; цены и курс обновляются каждый час.</p>
+              <h4 class="shop-heading">{{ t('tama.shop.title') }}</h4>
+              <p class="shop-lead">{{ t('tama.shop.hint') }}</p>
               <div v-if="shopError" class="tamagochi-alert">
                 {{ shopError }}
               </div>
@@ -634,41 +721,41 @@ function closeGuide() {
 
               <div ref="diamondHudRef" class="shop-wallet">
                 <div class="shop-wallet-item">
-                  <span class="shop-wallet-label">Алмазы</span>
+                  <span class="shop-wallet-label">{{ t('tama.shop.diamonds') }}</span>
                   <span class="shop-wallet-value">💎 {{ (auth.otherData as any).diamonds ?? 0 }}</span>
                 </div>
                 <div class="shop-wallet-item">
-                  <span class="shop-wallet-label">Монеты</span>
+                  <span class="shop-wallet-label">{{ t('tama.shop.coins') }}</span>
                   <span class="shop-wallet-value">🪙 {{ shop?.wallet?.coins ?? 0 }}</span>
                 </div>
               </div>
 
               <button type="button" class="btn shop-exchange-btn" :disabled="!canExchangeOneDiamond" @click="exchangeOneDiamond">
-                Обменять <b>1</b> 💎 на <b>{{ exchangeRate || '…' }}</b> монет
+                {{ t('tama.shop.exchangeOne', { rate: exchangeRate || '…' }) }}
               </button>
 
               <div class="shop-section">
                 <div class="shop-section-head">
-                  <span class="shop-section-title">Еда</span>
-                  <span class="shop-section-price">{{ foodCoinCost || '—' }} мон. за шт.</span>
+                  <span class="shop-section-title">{{ t('tama.shop.food') }}</span>
+                  <span class="shop-section-price">{{ t('tama.shop.coinsPerPiece', { coins: foodCoinCost || t('tama.units.dash') }) }}</span>
                 </div>
                 <div class="shop-grid-food">
                   <div
-                    v-for="t in PET_TYPES"
-                    :key="'food-card-' + t"
+                    v-for="pt in PET_TYPES"
+                    :key="'food-card-' + pt"
                     class="shop-card"
-                    :class="{ 'shop-card--accent': t === String(myPet?.type) }"
+                    :class="{ 'shop-card--accent': pt === String(myPet?.type) }"
                   >
-                    <img :src="pictureFood(t)" class="shop-card-icon" :alt="PET_FOOD_FOR_RU[t]" @error="($event.target as HTMLImageElement).style.display='none'" />
-                    <div class="shop-card-title">{{ PET_FOOD_FOR_RU[t] }}</div>
-                    <div class="shop-card-meta">В запасе: {{ foodByType[t] ?? 0 }}</div>
+                    <img :src="pictureFood(pt)" class="shop-card-icon" :alt="foodForLabel(pt)" @error="($event.target as HTMLImageElement).style.display='none'" />
+                    <div class="shop-card-title">{{ foodForLabel(pt) }}</div>
+                    <div class="shop-card-meta">{{ t('tama.shop.inStock', { count: foodByType[pt] ?? 0 }) }}</div>
                     <button
                       type="button"
                       class="btn shop-card-buy"
                       :disabled="!canBuyAnyFood"
-                      @click="buyFoodOne(t)"
+                      @click="buyFoodOne(pt)"
                     >
-                      Купить
+                      {{ t('tama.shop.buy') }}
                     </button>
                   </div>
                 </div>
@@ -676,38 +763,56 @@ function closeGuide() {
 
               <div class="shop-section">
                 <div class="shop-section-head">
-                  <span class="shop-section-title">Игрушка</span>
-                  <span class="shop-section-price">{{ toyCoinCost || '—' }} мон. за шт.</span>
+                  <span class="shop-section-title">{{ t('tama.shop.toy') }}</span>
+                  <span class="shop-section-price">{{ t('tama.shop.coinsPerPiece', { coins: toyCoinCost || t('tama.units.dash') }) }}</span>
                 </div>
                 <div class="shop-card shop-card--toy">
                   <div class="shop-card-toy-row">
                     <span class="shop-toy-emoji">🧸</span>
                     <div>
-                      <div class="shop-card-title">Буст настроения</div>
-                      <div class="shop-card-meta">В рюкзаке: {{ shop?.inventory?.toy ?? 0 }}</div>
+                      <div class="shop-card-title">{{ t('tama.shop.toyBoostMood') }}</div>
+                      <div class="shop-card-meta">{{ t('tama.shop.inBackpack', { count: shop?.inventory?.toy ?? 0 }) }}</div>
                     </div>
                   </div>
-                  <button type="button" class="btn shop-card-buy" :disabled="!canBuyToy" @click="buyToyOne">Купить</button>
+                  <button type="button" class="btn shop-card-buy" :disabled="!canBuyToy" @click="buyToyOne">{{ t('tama.shop.buy') }}</button>
                 </div>
               </div>
 
               <details class="shop-details">
-                <summary>Что дают предметы</summary>
+                <summary>{{ t('tama.shop.whatItemsDo') }}</summary>
                 <div class="shop-details-body">
-                  <div><b>Еда</b>: {{ shop?.effects?.food?.desc ?? '' }}</div>
-                  <div><b>Игрушка</b>: {{ shop?.effects?.toy?.desc ?? '' }}</div>
+                  <div><b>{{ t('tama.shop.food') }}</b>: {{ shop?.effects?.food?.desc ?? '' }}</div>
+                  <div><b>{{ t('tama.shop.toy') }}</b>: {{ shop?.effects?.toy?.desc ?? '' }}</div>
                 </div>
               </details>
             </div>
           </template>
 
-          <button type="button" class="btn btn-guide-secondary" @click="openGuide">Как работают параметры</button>
-          <button class="btn" @click="exit" style="height: 44px; margin-top: 10px;">К играм</button>
+          <button type="button" class="btn btn-guide-secondary" @click="openGuide">{{ t('tama.guideHowStatsWork') }}</button>
+          <button
+            v-if="hasPet"
+            type="button"
+            class="btn btn-guide-secondary"
+            :disabled="recreateBusy"
+            @click="recreatePet"
+          >
+            {{ recreateBusy ? t('common.loading') : t('tama.recreate', { coins: RECREATE_PET_COINS_COST }) }}
+          </button>
+          <details v-if="petHistory.length" class="tama-history-panel">
+            <summary>{{ t('tama.history') }}</summary>
+            <ul class="tama-history-list">
+              <li v-for="(h, i) in petHistory" :key="i">
+                <b>{{ h.pet_name || petTypeLabel(String(h.type)) || h.type }}</b>
+                — {{ fmtHistoryAge(Number(h.age_seconds ?? 0)) }}, {{ h.reason }}
+              </li>
+            </ul>
+          </details>
+          <button class="btn" @click="exit" style="height: 44px; margin-top: 10px;">{{ t('tama.backToGames') }}</button>
         </div>
       </aside>
 
-      <section class="tamagochi-map-section">
-        <h3 class="tamagochi-map-section-title">Карта мира</h3>
+      <section v-if="!recreateFlow" class="tamagochi-map-section">
+        <h3 class="tamagochi-map-section-title">{{ t('tama.worldMap') }}</h3>
         <div class="tamagochi-map-stage">
           <div
             v-if="waitingPetWorldSync"
@@ -718,9 +823,9 @@ function closeGuide() {
           >
             <div class="tamagochi-pet-wait-card">
               <div class="tamagochi-pet-wait-spinner" aria-hidden="true" />
-              <p class="tamagochi-pet-wait-title">Готовим питомца на поле</p>
+              <p class="tamagochi-pet-wait-title">{{ t('tama.worldSync.title') }}</p>
               <p class="tamagochi-pet-wait-text">
-                Питомец уже создан — он появится на карте через несколько секунд. Это нормально, подождите.
+                {{ t('tama.worldSync.text') }}
               </p>
             </div>
           </div>
@@ -739,7 +844,7 @@ function closeGuide() {
             <img
               class="map-food-img"
               :src="pictureFood(pk.for_type)"
-              :alt="PET_LABEL_RU[String(pk.for_type) as PetType] ?? String(pk.for_type)"
+              :alt="petTypeLabel(String(pk.for_type))"
             />
           </div>
           <div
@@ -762,7 +867,7 @@ function closeGuide() {
               animation: p.activity === 'moving' ? 'bob 0.8s ease-in-out infinite' : 'idle 1.4s ease-in-out infinite',
               ...petStyle(p)
             }"
-            :title="`${p.owner} • ${PET_LABEL_RU[String(p.type) as PetType] ?? p.type} • настроение: ${p.stats?.mood ?? 0}${p.online ? ' • в сети' : ''}`"
+            :title="t('tama.petTooltip', { owner: p.owner, type: petTypeLabel(String(p.type)), mood: p.stats?.mood ?? 0, online: p.online ? t('tama.online') : '' })"
           >
             <div
               v-if="p.owner === auth.username && (myEncounterProgress || myDiamondSearchPct !== null)"
@@ -788,27 +893,35 @@ function closeGuide() {
               <div
                 v-if="p.owner === auth.username && myDiamondSearchPct !== null"
                 class="diamond-progress-wrap"
-                title="Поиск алмаза — любая команда или поедание еды с карты сбросит прогресс"
+                :title="t('tama.searchResetHint')"
               >
-                <div class="diamond-progress-label">Поиск алмаза</div>
+                <div class="diamond-progress-label">
+                  {{ t('tama.diamondSearch') }}
+                  <span
+                    v-if="diamondMeta?.toy_diamond_boost"
+                    class="tama-toy-buff-icon"
+                    :title="t('tama.toyBoostActive')"
+                  >🧸</span>
+                </div>
                 <div class="diamond-progress-track">
                   <div class="diamond-progress-fill" :style="{ width: `${myDiamondSearchPct}%` }"></div>
                 </div>
               </div>
             </div>
-            <div style="position:absolute; top:-18px; left:50%; transform: translateX(-50%); font-size:12px; font-weight:700; text-shadow: 0 2px 10px rgba(0,0,0,0.6);">
-              {{ p.owner }}
+            <div style="position:absolute; top:-18px; left:50%; transform: translateX(-50%); font-size:12px; font-weight:700; text-shadow: 0 2px 10px rgba(0,0,0,0.6); text-align:center; white-space:nowrap;">
+              <div>{{ petLabel(p) }}</div>
+              <div v-if="petSubLabel(p)" style="font-size:10px; font-weight:500; opacity:0.85;">{{ petSubLabel(p) }}</div>
             </div>
             <div class="pet-avatar-box" :class="'avatar-bg-' + String(p.type)">
               <img
                 class="pet-avatar"
                 :src="pictureAvatar(String(p.type))"
-                :alt="PET_LABEL_RU[String(p.type) as PetType] ?? String(p.type)"
+                :alt="petTypeLabel(String(p.type))"
                 @error="($event.target as HTMLImageElement).style.visibility = 'hidden'"
               />
             </div>
             <div style="position:absolute; bottom:-16px; left:50%; transform: translateX(-50%); font-size:11px; opacity:0.9;">
-              {{ activityRu(p.activity) }}
+              {{ activityLabel(p.activity) }}
             </div>
           </div>
 
@@ -828,94 +941,43 @@ function closeGuide() {
           </div>
         </div>
         </div>
-        <div style="margin-top:10px; opacity:0.85; font-size: 13px;">
-          Клик по полю — команда питомцу идти в точку. С чужими питомцами нельзя взаимодействовать, можно только наблюдать.
-        </div>
+        <div style="margin-top:10px; opacity:0.85; font-size: 13px;">{{ t('tama.mapHint') }}</div>
       </section>
     </section>
   </main>
   <Teleport to="body">
+    <div v-if="showRecreateConfirm" class="guide-backdrop" @click.self="cancelRecreatePet">
+      <div class="guide-modal" role="dialog" aria-modal="true" aria-labelledby="recreate-title">
+        <div class="guide-modal-head">
+          <h2 id="recreate-title" class="guide-title">{{ t('tama.recreateConfirm.title') }}</h2>
+          <button type="button" class="guide-close" :aria-label="t('common.close')" @click="cancelRecreatePet">×</button>
+        </div>
+        <div class="guide-body">
+          <p style="margin:0;">{{ t('tama.recreateConfirm.text') }}</p>
+        </div>
+        <div class="guide-footer" style="display:flex; gap:10px; justify-content:flex-end;">
+          <button type="button" class="btn" :disabled="recreateBusy" @click="cancelRecreatePet">{{ t('common.cancel') }}</button>
+          <button type="button" class="btn" :disabled="recreateBusy" @click="confirmRecreatePet">
+            {{ recreateBusy ? t('common.loading') : t('tama.recreateConfirm.confirm') }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div v-if="showGuide" class="guide-backdrop" @click.self="closeGuide">
       <div class="guide-modal" role="dialog" aria-modal="true" aria-labelledby="guide-title">
         <div class="guide-modal-head">
-          <h2 id="guide-title" class="guide-title">Обучение</h2>
-          <button type="button" class="guide-close" aria-label="Закрыть" @click="closeGuide">×</button>
+          <h2 id="guide-title" class="guide-title">{{ t('tama.guide') }}</h2>
+          <button type="button" class="guide-close" :aria-label="t('common.close')" @click="closeGuide">×</button>
         </div>
         <div class="guide-body">
-          <section class="guide-section">
-            <h3>Что за полоски</h3>
-            <p>
-              У питомца четыре шкалы: <b>здоровье</b>, <b>сытость</b>, <b>настроение</b> и <b>бодрость</b>.
-              Сытость — это «наелся или хочет есть»: чем выше полоска, тем он сытее.
-              Бодрость — как силы: побежал, поиграл — силы меньше, поспал — снова больше.
-            </p>
-          </section>
-          <section class="guide-section">
-            <h3>Как восстановить здоровье</h3>
-            <ul>
-              <li><b>Поспать</b> — во сне здоровье поднимается вдвое быстрее, если питомец не очень голоден (как и бодрость).</li>
-              <li>
-                Кнопка <b>«+10% HP»</b> рядом с «Поиграть» — моментально добавляет 10 процентов за <b>30 монет</b>
-                (если монет хватает и здоровье ещё не полное).
-              </li>
-              <li>Не давай сильно проголодаться и не переутомляй — от этого здоровье может падать.</li>
-            </ul>
-          </section>
-          <section class="guide-section">
-            <h3>Как восстановить сытость</h3>
-            <p>
-              Нажми <b>«Покормить»</b>, если в запасе есть еда для твоего типа питомца. Еду покупаешь в магазине за монеты.
-              Во сне тоже немного хочется есть, но медленнее, чем когда он бегает наяву.
-            </p>
-          </section>
-          <section class="guide-section">
-            <h3>Как поднять настроение</h3>
-            <p>
-              Нажми <b>«Поиграть»</b> — команда стоит <b>25 монет</b>. Игрушку из магазина можно использовать, чтобы настроение падало не так быстро.
-              Голод и плохое самочувствие настроение портят — корми и следи за здоровьем.
-            </p>
-          </section>
-          <section class="guide-section">
-            <h3>Как восстановить бодрость</h3>
-            <p>
-              Уложи спать кнопкой <b>«Уложить спать»</b> (<b>10 монет</b>). Примерно за <b>5 часов</b> непрерывного сна бодрость с нуля
-              дорастёт до максимума. На бодрствовании силы тратятся: обычно полная шкала садится примерно за
-              <b>от 6 до 14 часов</b> — зависит от того, чем он занят и как себя чувствует.
-              Если бодрость упала до нуля, питомец <b>сам уснёт</b>.
-            </p>
-          </section>
-          <section class="guide-section">
-            <h3>Про алмазы</h3>
-            <p>
-              Питомец сам ищет алмазы на карте, когда он в форме. Если <b>среднее самочувствие</b> по четырём шкалам
-              (здоровье, сытость, бодрость, настроение) ниже порога, поиск не начинается — смотри индикатор «Активность
-              поиска» в левой панели. Чем все показатели выше, тем чаще возможны попытки. Игрушка из магазина даёт
-              пассивный бонус настроению на сутки (суммируется) и отдельный <b>буст частоты поиска на 10 минут</b>
-              (тоже суммируется) — оставшееся время показывается там же.
-            </p>
-          </section>
-          <section class="guide-section">
-            <h3>Почему всё связано</h3>
-            <p>
-              Усталый, голодный или больной питомец быстрее теряет силы и хуже себя чувствует.
-              Всё как у людей: поешь — легче на душе, выспался — больше энергии.
-            </p>
-          </section>
-          <section class="guide-section">
-            <h3>На карте с другими питомцами</h3>
-            <p>
-              Если один <b>спит</b>, они не будут играть и не подерутся. Но иногда бодрствующий может
-              <b>разбудить</b> спящего — это случайность, примерно <b>один раз из двадцати</b>.
-            </p>
-          </section>
-          <section class="guide-section guide-section--muted">
-            <p class="guide-tip">
-              Совет: перед долгой прогулкой по карте проверь бодрость и положи еду в запас.
-            </p>
-          </section>
+            <section class="guide-section" v-for="s in guideSections" :key="String(s.title || '')">
+              <h3>{{ s.title }}</h3>
+              <div v-if="s.html" v-html="s.html" />
+            </section>
         </div>
         <div class="guide-footer">
-          <button type="button" class="btn" @click="closeGuide">Понятно</button>
+          <button type="button" class="btn" @click="closeGuide">{{ t('tama.guideOk') }}</button>
         </div>
       </div>
     </div>
@@ -1394,7 +1456,7 @@ function closeGuide() {
   background: linear-gradient(90deg, rgba(140, 200, 255, 0.90), rgba(80, 255, 200, 0.85));
 }
 
-/* Крупное поле: ширина секции после panel-tamagochi + потолок ~×6 к старому 3840px */
+/* Large field: section width after panel-tamagochi. */
 .tamagochi-map-section {
   flex: 1;
   border-radius: 14px;
@@ -1590,12 +1652,42 @@ function closeGuide() {
   gap: 4px;
 }
 .diamond-progress-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.03em;
   color: rgba(255, 255, 255, 0.94);
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.75);
   white-space: nowrap;
+}
+.tama-toy-buff-icon {
+  font-size: 12px;
+  line-height: 1;
+}
+.tama-pet-name-field {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+}
+.tama-pet-name-input {
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(0,0,0,0.25);
+  color: inherit;
+  padding: 0 10px;
+}
+.tama-history-panel {
+  margin-top: 8px;
+  font-size: 13px;
+}
+.tama-history-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
 }
 .diamond-progress-track {
   width: 100%;

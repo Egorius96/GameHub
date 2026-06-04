@@ -36,6 +36,7 @@ def _ensure_game_progress_defaults(game_key: str, progress: dict) -> dict:
         progress.setdefault("playtime", 0)
         progress.setdefault("pet", None)
         progress.setdefault("pet_state", None)
+        progress.setdefault("pet_history", [])
         progress.setdefault("last_update_at", None)
         progress.setdefault("neglect", {})
         progress.setdefault("coins", 0)
@@ -146,6 +147,9 @@ def ensure_gameshub_schema(other_data: dict) -> dict:
     other_data = ensure_pro_racing_schema(other_data)
     diamonds = int(other_data.get("diamonds", 0))
     other_data["diamonds"] = diamonds
+    lang = other_data.get("ui_lang")
+    if lang not in ("en", "ru", "it", "es", "de"):
+        other_data["ui_lang"] = "en"
     av = other_data.get("avatar_url")
     if av is None or (isinstance(av, str) and not str(av).strip()):
         other_data["avatar_url"] = settings.default_avatar_url

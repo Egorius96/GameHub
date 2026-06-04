@@ -28,8 +28,9 @@ async def game_ws(websocket: WebSocket, token: str, mode: str = "normal") -> Non
     other_data = ensure_pro_racing_schema(session.user.get("other_data", {}) or {})
     game = get_pro_racing_game(other_data)
     car_level = int(game.get("car_level", 1))
+    superpowers = game.get("superpowers") if isinstance(game.get("superpowers"), dict) else {}
     key = f"{username}:{id(websocket)}"
-    engine = session_manager.create(key, mode, car_level)
+    engine = session_manager.create(key, mode, car_level, superpowers=superpowers)
 
     try:
         while True:
@@ -50,7 +51,7 @@ async def game_ws(websocket: WebSocket, token: str, mode: str = "normal") -> Non
                     elif event_type == "input.ability":
                         engine.ability(event.get("ability", ""))
                     elif event_type == "session.restart":
-                        engine = session_manager.create(key, mode, car_level)
+                        engine = session_manager.create(key, mode, car_level, superpowers=superpowers)
                 except TimeoutError:
                     break
 

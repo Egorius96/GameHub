@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { GAME_ASSETS_BASE } from '../../config/gameAssets'
+const { t } = useI18n()
+
 
 export type RpsMove = 'rock' | 'paper' | 'scissors'
 export type RpsRoundVerdict = 'win' | 'lose' | 'tie' | null
@@ -33,9 +36,9 @@ const emit = defineEmits<{
 }>()
 
 const labels: Record<RpsMove, string> = {
-  rock: 'Камень',
-  paper: 'Бумага',
-  scissors: 'Ножницы',
+  rock: t('rps.moves.rock'),
+  paper: t('rps.moves.paper'),
+  scissors: t('rps.moves.scissors'),
 }
 
 const faces: Record<RpsMove, string> = {
@@ -77,7 +80,7 @@ const showPickMark = computed(() => Boolean(props.selected) && !props.opponentRe
 
 <template>
   <div class="rps-board">
-    <p class="rps-board-label">Соперник</p>
+    <p class="rps-board-label">{{ t('rps.opponent') }}</p>
     <div class="rps-card-row">
       <button
         v-for="slot in opponentMovesOrder"
@@ -112,11 +115,11 @@ const showPickMark = computed(() => Boolean(props.selected) && !props.opponentRe
       <span v-else-if="roundVerdict === 'lose'" class="rps-verdict-icon rps-verdict-icon--x" aria-hidden="true">✕</span>
       <span v-else class="rps-verdict-icon rps-verdict-icon--tie" aria-hidden="true">=</span>
       <span class="rps-verdict-text">
-        {{ roundVerdict === 'win' ? 'Win' : roundVerdict === 'lose' ? 'Lose' : 'Ничья' }}
+        {{ roundVerdict === 'win' ? t('rps.verdict.win') : roundVerdict === 'lose' ? t('rps.verdict.lose') : t('rps.verdict.tie') }}
       </span>
     </div>
 
-    <p class="rps-board-label rps-board-label--you">Ваш выбор</p>
+    <p class="rps-board-label rps-board-label--you">{{ t('rps.youChoice') }}</p>
     <div class="rps-card-row">
       <button
         v-for="move in playerMoves"

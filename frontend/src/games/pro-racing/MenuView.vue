@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { onBeforeRouteLeave, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../../stores/auth'
 import { playProRacingSfx, startGameMusic, stopMusic } from '../../audio/sound'
 import { startHeartbeat, stopHeartbeat } from '../../telemetry/heartbeat'
@@ -8,6 +9,7 @@ import { startPresencePing, stopPresencePing } from '../../telemetry/presence'
 
 const router = useRouter()
 const auth = useAuthStore()
+const { t } = useI18n()
 
 const diamonds = computed(() => Number((auth.otherData as any).diamonds ?? 0))
 const gameData = computed(() => ((auth.otherData as any).games ?? {})?.misha_pro_racing_game ?? {})
@@ -46,31 +48,31 @@ function go(path: string) {
     <section class="pr-shell">
       <header class="pr-hero">
         <p class="pr-kicker">Pro Racing</p>
-        <h1 class="pr-title">Главное меню</h1>
-        <p class="pr-sub">Привет, <strong>{{ auth.username }}</strong></p>
+        <h1 class="pr-title">{{ t('proRacing.menu.title') }}</h1>
+        <p class="pr-sub">{{ t('proRacing.menu.hello', { username: auth.username }) }}</p>
         <div class="pr-stats">
           <div class="pr-stat">
-            <span class="pr-stat-label">Алмазы</span>
+            <span class="pr-stat-label">{{ t('proRacing.menu.diamonds') }}</span>
             <span class="pr-stat-value">{{ diamonds }}</span>
           </div>
           <div class="pr-stat">
-            <span class="pr-stat-label">Уровень машины</span>
+            <span class="pr-stat-label">{{ t('proRacing.menu.carLevel') }}</span>
             <span class="pr-stat-value">{{ level }} / 3</span>
           </div>
         </div>
       </header>
 
-      <h2 class="pr-section-title">Режим</h2>
+      <h2 class="pr-section-title">{{ t('proRacing.menu.mode') }}</h2>
       <div class="pr-mode-grid">
         <button type="button" class="pr-mode-card pr-mode-card--accent" @click="openMode('normal')">
           <span class="pr-mode-icon" aria-hidden="true">▶</span>
-          <span class="pr-mode-name">Обычный</span>
-          <span class="pr-mode-desc">Классический заезд, WASD</span>
+          <span class="pr-mode-name">{{ t('proRacing.menu.normal') }}</span>
+          <span class="pr-mode-desc">{{ t('proRacing.menu.normalDesc') }}</span>
         </button>
         <button type="button" class="pr-mode-card" @click="openMode('hard')">
           <span class="pr-mode-icon" aria-hidden="true">⚡</span>
-          <span class="pr-mode-name">Сложный</span>
-          <span class="pr-mode-desc">Быстрее и жёстче модификаторы</span>
+          <span class="pr-mode-name">{{ t('proRacing.menu.hard') }}</span>
+          <span class="pr-mode-desc">{{ t('proRacing.menu.hardDesc') }}</span>
         </button>
         <button
           type="button"
@@ -80,18 +82,18 @@ function go(path: string) {
           @click="openMode('pvp_local')"
         >
           <span class="pr-mode-icon" aria-hidden="true">👥</span>
-          <span class="pr-mode-name">Два игрока</span>
+          <span class="pr-mode-name">{{ t('proRacing.menu.twoPlayers') }}</span>
           <span class="pr-mode-desc">
-            {{ level < 3 ? `Нужен уровень машины 3 (сейчас ${level})` : 'Стрелки — второй игрок' }}
+            {{ level < 3 ? t('proRacing.menu.twoPlayersLocked', { level }) : t('proRacing.menu.twoPlayersDesc') }}
           </span>
         </button>
       </div>
 
-      <h2 class="pr-section-title">Ещё</h2>
+      <h2 class="pr-section-title">{{ t('proRacing.menu.more') }}</h2>
       <div class="pr-actions">
-        <button type="button" class="pr-link-btn" @click="go('/store')">Магазин и настройки</button>
-        <button type="button" class="pr-link-btn" @click="go('/leaderboard')">Таблица лидеров</button>
-        <button type="button" class="pr-link-btn pr-link-btn--ghost" @click="go('/games')">Выйти в хаб</button>
+        <button type="button" class="pr-link-btn" @click="go('/store')">{{ t('proRacing.menu.store') }}</button>
+        <button type="button" class="pr-link-btn" @click="go('/leaderboard')">{{ t('proRacing.menu.leaderboard') }}</button>
+        <button type="button" class="pr-link-btn pr-link-btn--ghost" @click="go('/games')">{{ t('proRacing.menu.backToHub') }}</button>
       </div>
     </section>
   </main>

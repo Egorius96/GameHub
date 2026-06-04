@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { playSfx } from '../../audio/sound'
 
 const props = defineProps<{
@@ -18,6 +19,7 @@ const emit = defineEmits<{
 }>()
 
 const entered = ref(false)
+const { t } = useI18n()
 
 watch(
   () => props.show,
@@ -61,27 +63,24 @@ function onExit() {
           }"
         >
           <div class="rps-end-glow" aria-hidden="true" />
-          <p class="rps-end-eyebrow">Итог матча (3 раунда)</p>
+          <p class="rps-end-eyebrow">{{ t('rps.end.eyebrow') }}</p>
           <h2
             id="rps-end-title"
             class="rps-end-title"
             :class="tie ? 'rps-end-title--tie' : won ? 'rps-end-title--win' : 'rps-end-title--lose'"
           >
-            {{ tie ? 'Ничья!' : won ? 'Победа!' : 'Проигрыш' }}
+            {{ tie ? t('rps.end.titleTie') : won ? t('rps.end.titleWin') : t('rps.end.titleLose') }}
           </h2>
           <p class="rps-end-score">
-            Вы <strong>{{ playerScore }}</strong>
-            <span class="rps-end-score-sep">:</span>
-            <strong>{{ opponentScore }}</strong>
-            {{ opponentLabel || 'соперник' }}
+            {{ t('rps.end.scoreLine', { player: playerScore, opponent: opponentScore, opponentLabel: opponentLabel || t('rps.opponent') }) }}
           </p>
-          <p v-if="tie" class="rps-end-hint">Равный счёт побед — матч завершён вничью.</p>
-          <p v-else-if="won && rewardPending" class="rps-end-hint">Алмаз скоро появится в копилке…</p>
-          <p v-else-if="won" class="rps-end-hint">+1 алмаз в копилку GameHub</p>
-          <p v-else class="rps-end-hint">В следующий раз повезёт!</p>
+          <p v-if="tie" class="rps-end-hint">{{ t('rps.end.tieHint') }}</p>
+          <p v-else-if="won && rewardPending" class="rps-end-hint">{{ t('rps.end.rewardPending') }}</p>
+          <p v-else-if="won" class="rps-end-hint">{{ t('rps.end.rewardWon') }}</p>
+          <p v-else class="rps-end-hint">{{ t('rps.end.rewardLose') }}</p>
           <div class="rps-end-actions">
-            <button type="button" class="btn rps-end-btn rps-end-btn--primary" @click="onRestart">Начать заново</button>
-            <button type="button" class="btn rps-end-btn rps-end-btn--ghost" @click="onExit">Закончить игру</button>
+            <button type="button" class="btn rps-end-btn rps-end-btn--primary" @click="onRestart">{{ t('rps.end.restart') }}</button>
+            <button type="button" class="btn rps-end-btn rps-end-btn--ghost" @click="onExit">{{ t('rps.end.exit') }}</button>
           </div>
         </div>
       </div>

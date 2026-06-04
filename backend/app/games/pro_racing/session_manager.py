@@ -7,8 +7,8 @@ class SessionManager:
     def __init__(self) -> None:
         self.sessions: dict[str, GameEngine] = {}
 
-    def create(self, key: str, mode: str, car_level: int) -> GameEngine:
-        engine = GameEngine(mode=mode, car_level=car_level)
+    def create(self, key: str, mode: str, car_level: int, superpowers: dict[str, bool] | None = None) -> GameEngine:
+        engine = GameEngine(mode=mode, car_level=car_level, superpowers=superpowers)
         self.sessions[key] = engine
         return engine
 

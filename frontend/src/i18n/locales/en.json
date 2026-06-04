@@ -1,0 +1,598 @@
+{
+  "common": {
+    "ok": "OK",
+    "cancel": "Cancel",
+    "close": "Close",
+    "back": "Back",
+    "loading": "Loading…",
+    "networkError": "Network error",
+    "saved": "Saved",
+    "copied": "Copied",
+    "yes": "Yes",
+    "no": "No"
+  },
+  "errors": {
+    "generic": "Something went wrong",
+    "unauthorized": "Unauthorized",
+    "insufficient_diamonds": "Not enough diamonds (need {required})",
+    "insufficient_coins": "Not enough coins (need {required})",
+    "no_active_pet": "No active pet",
+    "need_food": "Buy food for your pet type in the shop",
+    "action_failed": "Action failed",
+    "health_full": "Health is already full",
+    "unknown_item": "Unknown item",
+    "food_for_required": "Select pet type for food",
+    "same_ip": "Transfer blocked by anti-fraud (same IP)",
+    "invalid_recipient": "Invalid recipient",
+    "transfer_failed": "Transfer failed"
+  },
+  "hub": {
+    "account": "Account",
+    "nickname": "Nickname",
+    "diamonds": "Diamonds",
+    "online": "Online",
+    "playersOnline": "Players online",
+    "messenger": "Messenger",
+    "logout": "Logout",
+    "deleteAccount": "Delete account",
+    "games": "Games",
+    "language": "Language",
+    "tamagochiReminderCritical": "Your Tamagochi is in critical condition — feed or heal it!",
+    "tamagochiReminderHungry": "Your Tamagochi is hungry — check on it soon.",
+    "likesNetworkError": "Likes: network error",
+    "creator": {
+      "toggleShow": "Authors",
+      "toggleHide": "Hide",
+      "empty": "The author hasn't added a message yet.",
+      "iAmAuthor": "I am the author",
+      "modalTitle": "Author settings",
+      "password": "Author password",
+      "message": "Message",
+      "photo": "Photo",
+      "save": "Save",
+      "reset": "Reset",
+      "fileTooLarge": "Image is too large (max 5 MB before compression).",
+      "wrongPassword": "Wrong password.",
+      "notConfigured": "Author password is not configured for this game.",
+      "hint": "Enter the password from environment variables for this game. Photo is compressed on upload like the account avatar."
+    },
+    "avatar": {
+      "button": "Avatar",
+      "uploadError": "Failed to upload avatar"
+    },
+    "delete": {
+      "open": "Delete account",
+      "title": "Delete account",
+      "text": "This action is irreversible. Your account will be deleted permanently.",
+      "confirm": "Delete",
+      "cancel": "Cancel",
+      "networkError": "Network: request failed"
+    },
+    "status": {
+      "inDevelopment": "In development"
+    }
+  },
+  "login": {
+    "signIn": "Sign in",
+    "register": "Create account",
+    "username": "Username",
+    "password": "Password",
+    "accountTitle": "Account",
+    "usernamePlaceholder": "e.g., misha",
+    "cornerAria": "Programming school",
+    "blockedHistoryAria": "Warnings history",
+    "blockedHistoryEmpty": "No saved warning texts in history.",
+    "timeLeft": {
+      "hms": "{h} h {m} min",
+      "ms": "{m} min {s} s",
+      "s": "{s} s"
+    },
+    "errors": {
+      "tempBan": "Account temporarily blocked. Sign in will be available at: {end}. Approximately left: {left}.",
+      "blockedInfo": "Access is blocked due to rule violations (warnings limit). Below is the security notifications history.",
+      "permanentBlocked": "Account is permanently blocked. Contact an administrator.",
+      "signIn": "Sign-in error: check username and password",
+      "reservedUsername": "Username is reserved by the system (admindb, database).",
+      "dailyLimit": "Daily registration limit reached: max 2 new accounts per day. Try again tomorrow.",
+      "register": "Registration error: username is taken or server is unavailable"
+    }
+  },
+  "messenger": {
+    "title": "Messenger",
+    "nav": { "hub": "Hub" },
+    "walletTitle": "Diamond balance",
+    "secureHint": "Messages are transmitted via a secure channel.",
+    "groupFallback": "Group",
+    "groupBadge": "group",
+    "searchUserPlaceholder": "Find a user…",
+    "messagePlaceholder": "Message…",
+    "emptyThread": "Select a chat on the left or create a new one.",
+    "presence": { "online": "Online", "offline": "Offline" },
+    "emoji": { "title": "Emoji", "insert": "Insert {emoji}" },
+    "actions": {
+      "newChat": "New chat",
+      "group": "Group",
+      "diamonds": "Diamonds",
+      "leave": "Leave",
+      "send": "Send",
+      "write": "Write",
+      "delete": "Delete",
+      "accept": "Accept",
+      "decline": "Decline",
+      "cancel": "Cancel",
+      "request": "Request",
+      "addFriend": "Add",
+      "create": "Create",
+      "transfer": "Transfer"
+    },
+    "friends": {
+      "title": "Friends",
+      "incomingCount": "New requests: {count}",
+      "hint": "Friends list first; requests and search are below.",
+      "listAria": "Friends list",
+      "myFriends": "My friends",
+      "empty": "No one yet — invite via requests below.",
+      "requestsTitle": "Requests and adding friends",
+      "incoming": "Incoming requests",
+      "noIncoming": "No new requests",
+      "outgoing": "Outgoing requests",
+      "none": "None",
+      "searchTitle": "Search by nickname",
+      "searchPlaceholder": "Enter nickname…"
+    },
+    "toasts": {
+      "diamondsCredited": "+{amount} diamonds credited",
+      "alreadyFriends": "Already friends",
+      "alreadyPending": "Request already sent",
+      "requestSent": "Request sent",
+      "friendAdded": "Added to friends",
+      "memberAdded": "Added: {username}",
+      "friendRequestFrom": "Friend request: {username}"
+    },
+    "system": {
+      "transferToYou": "You received {amount} dia.",
+      "transfer": "Diamond transfer: {amount} (fee {commission})"
+    },
+    "errors": {
+      "sendFailed": "Failed to send",
+      "requestFailed": "Failed to send request",
+      "acceptFailed": "Failed to accept",
+      "genericFailed": "Failed",
+      "openChatFailed": "Failed to open chat",
+      "createGroupFailed": "Failed to create group",
+      "addMemberFailed": "Failed to add",
+      "minDiamonds": "Minimum 3 diamonds"
+    },
+    "confirms": {
+      "leaveChat": "Leave this chat?"
+    },
+    "modals": {
+      "newDmTitle": "New direct chat",
+      "nicknamePlaceholder": "Nickname…",
+      "newGroupTitle": "New group",
+      "groupNamePlaceholder": "Title",
+      "groupHint": "You can add members after creating (search in the chat header).",
+      "transferTitle": "Diamond transfer"
+    },
+    "transfer": {
+      "preview": {
+        "receiver": "Receiver:",
+        "fee": "fee {pct}%",
+        "total": "total:"
+      },
+      "minHint": "Minimum {min} diamonds to receiver.",
+      "amountLabel": "Amount (integer, from {min})"
+    }
+  },
+  "catalog": {
+    "proRacing": {
+      "desc": "Arcade racing with rocks, diamonds and upgrades."
+    },
+    "rps": {
+      "desc": "Classic game: robot, online rooms and diamond bets."
+    },
+    "tamagochi": {
+      "desc": "A world of pets: feed, play, sleep and watch others."
+    },
+    "teamTerritory": {
+      "desc": "Paint the G×G field faster than opponents: ticks, paint, Challenge and diamond rewards."
+    },
+    "mc2d": {
+      "desc": "2D mining, world queue, dust and exchange with GameHub diamonds."
+    }
+  },
+  "teamTerritory": {
+    "nav": {
+      "hub": "Hub"
+    },
+    "wip": {
+      "unavailable": "Team Territory is not available yet.",
+      "backToHub": "Back to hub"
+    },
+    "spectator": {
+      "banner": "Spectator: painting is disabled. Wait for the next match.",
+      "queue": "Queue: {pos}"
+    },
+    "lobby": {
+      "title": "Lobby",
+      "room": "Room: {roomId}",
+      "roomId": "Room ID",
+      "teams": "Teams:",
+      "teamN": "team {team}",
+      "readyFlag": "ready",
+      "ready": "Ready"
+    },
+    "match": {
+      "tick": "Tick #{tick}",
+      "tickCloseIn": "Tick closes in: {seconds} s",
+      "paint": "Paint: {cur} / {max}",
+      "opponentInk": "Opponent ink (sum): {sum}",
+      "stall": "No actions — draw in {seconds} s",
+      "buyPaint": "Buy +{amount} ({cost} 💎)"
+    },
+    "finish": {
+      "title": "Match finished",
+      "scores": "Team scores",
+      "winners": "Winning teams",
+      "backToLobby": "Back to lobby"
+    },
+    "challenge": {
+      "title": "Challenge · mode {mode}",
+      "deadline": "Round deadline: {time}",
+      "submit": "Submit",
+      "letter": "Letter",
+      "next": "Next"
+    }
+  },
+  "tama": {
+    "title": "Tamagochi World",
+    "guide": "Guide",
+    "noPet": "You have no pet. Pick a type and tap Adopt.",
+    "adopt": "Adopt pet",
+    "petName": "Pet name (optional)",
+    "recreate": "Create new pet ({coins} 🪙)",
+    "history": "Past pets",
+    "ageDays": "Age: {days} days",
+    "bestDiamondRate": "At max stats: ~1 diamond / {minutes} min",
+    "toyBoostActive": "Toy diamond boost active",
+    "diamondSearch": "Diamond search",
+    "backToGames": "To games",
+    "adoptTypeAria": "Pet type",
+    "ws": {
+      "connectingTitle": "Connecting to field"
+    },
+    "status": "Status",
+    "sleeping": "Sleeping",
+    "stats": {
+      "hp": "Health",
+      "fullness": "Fullness",
+      "mood": "Mood",
+      "energy": "Energy"
+    },
+    "encounter": {
+      "fight": "Fight",
+      "play": "Playing"
+    },
+    "petTypes": {
+      "cat": "Cat",
+      "dog": "Dog",
+      "pokemon": "Pokemon",
+      "capybara": "Capybara",
+      "alien": "Alien"
+    },
+    "foodFor": {
+      "cat": "for cat",
+      "dog": "for dog",
+      "pokemon": "for pokemon",
+      "capybara": "for capybara",
+      "alien": "for alien"
+    },
+    "activities": {
+      "wandering": "wandering",
+      "moving": "moving",
+      "sleeping": "sleeping",
+      "fighting": "fighting",
+      "playing_with_other": "playing",
+      "eating_map_food": "eating",
+      "digging": "digging",
+      "hunting": "hunting",
+      "sparking": "sparking",
+      "relaxing": "relaxing",
+      "scanning": "scanning",
+      "exploring": "exploring"
+    },
+    "diamondsOnMap": "Diamond search on map",
+    "searchActivity": "Search activity",
+    "searchActivityHint": "The higher the bar, the more often your pet can start searching. Average pause: ~{minutes} min (randomized).",
+    "diamondBlocked": "Not running now: average wellbeing across four bars is below the threshold ({avg}%; need about 38%). Feed, let it sleep and improve mood.",
+    "toyPassiveLeft": "Toy (mood): left",
+    "toyDiamondBoostLeft": "Diamond search boost: left",
+    "searchResetHint": "Diamond search: any command or eating map food will reset progress",
+    "actions": {
+      "feed": "Feed",
+      "play": "Play ({coins} 🪙)",
+      "heal": "+10% HP ({coins} 🪙)",
+      "healHint": "Adds 10% to HP bar",
+      "sleep": "Put to sleep ({coins} 🪙)",
+      "wake": "Wake up"
+    },
+    "shop": {
+      "title": "Shop",
+      "hint": "One tap — one purchase. Paid in coins; prices and exchange rate update every hour.",
+      "diamonds": "Diamonds",
+      "coins": "Coins",
+      "exchangeOne": "Exchange 1 💎 for {rate} coins",
+      "food": "Food",
+      "toy": "Toy",
+      "coinsPerPiece": "{coins} coins / pc.",
+      "inStock": "In stock: {count}",
+      "buy": "Buy",
+      "toyBoostMood": "Mood boost",
+      "inBackpack": "In backpack: {count}",
+      "whatItemsDo": "What items do",
+      "toySuccess": "Toy active: mood decreases slower (~24 h per purchase, stacks). Diamond search frequency boost — 10 minutes (stacks). See the “Diamond search” panel on the left."
+    },
+    "guideHowStatsWork": "How stats work",
+    "worldMap": "World map",
+    "worldSync": {
+      "title": "Preparing your pet on field",
+      "text": "Your pet is already created — it will appear on the map in a few seconds. This is normal, please wait."
+    },
+    "mapHint": "Click on the field to command your pet to move to a point. You can’t interact with чужие pets — only watch.",
+    "online": "online",
+    "petTooltip": "{owner} • {type} • mood: {mood}{online}",
+    "guideOk": "OK",
+    "guideSections": [
+      {
+        "title": "What are the bars",
+        "html": "<p>Your pet has four bars: <b>health</b>, <b>fullness</b>, <b>mood</b> and <b>energy</b>. Fullness means “is full or hungry”: higher bar — more full. Energy is like силы: run/play — lower, sleep — higher.</p>"
+      },
+      {
+        "title": "How to restore health",
+        "html": "<ul><li><b>Sleep</b>: health restores ~2× faster while sleeping if the pet isn’t very hungry (same for energy).</li><li><b>+10% HP</b> button adds 10% instantly for <b>30 coins</b> (if you have coins and HP isn’t full).</li><li>Don’t let it get very hungry or exhausted — health may drop.</li></ul>"
+      },
+      {
+        "title": "How to restore fullness",
+        "html": "<p>Tap <b>Feed</b> if you have food for your pet type. You buy food in the shop for coins. While sleeping it gets hungry slower than when active.</p>"
+      },
+      {
+        "title": "How to improve mood",
+        "html": "<p>Tap <b>Play</b> — costs <b>25 coins</b>. The shop toy can be used so mood decreases slower. Hunger and bad wellbeing hurt mood — feed and watch health.</p>"
+      },
+      {
+        "title": "How to restore energy",
+        "html": "<p>Put it to sleep with <b>Put to sleep</b> (<b>10 coins</b>). About <b>5 hours</b> of continuous sleep restores energy from zero to max. While awake, energy drains (usually full bar lasts <b>6–14 hours</b> depending on activity and wellbeing). If energy hits zero, the pet <b>falls asleep</b> automatically.</p>"
+      },
+      {
+        "title": "About diamonds",
+        "html": "<p>The pet searches diamonds on the map when it’s doing well. If <b>average wellbeing</b> across the four bars is below the threshold, searching doesn’t start — see the “Search activity” indicator. Higher stats — more attempts. The shop toy gives a passive mood бонус for a day (stacks) and a separate <b>10-minute search frequency boost</b> (stacks). Remaining time is shown in the same panel.</p>"
+      },
+      {
+        "title": "Why everything is connected",
+        "html": "<p>A tired, hungry or sick pet loses energy faster and feels worse. Like humans: eat — mood improves, sleep — more energy.</p>"
+      },
+      {
+        "title": "On the map with other pets",
+        "html": "<p>If one pet is <b>sleeping</b>, they won’t play or fight. Sometimes an awake pet can <b>wake</b> a sleeping one — random, about <b>1 out of 20</b>.</p>"
+      },
+      {
+        "title": "Age and diamonds",
+        "html": "<p>The longer the pet lives without recreation, the more often it finds diamonds when doing well: new — about <b>1 diamond / 2 min</b>, after ~3 months — up to <b>1 diamond / 1 min</b> at max stats.</p>"
+      },
+      {
+        "title": "Tip",
+        "html": "<p class=\"guide-tip\">Tip: before a long walk on the map, check energy and keep food in запас.</p>"
+      }
+    ],
+    "units": {
+      "dash": "—",
+      "pcs": "pcs.",
+      "minutesShort": "{n} min",
+      "hoursShort": "{n} h",
+      "daysShort": "{n} d",
+      "hours": "{n} h"
+    },
+    "recreateConfirm": {
+      "title": "Create a new pet?",
+      "text": "This will archive your current pet and you will start over with a new one. Your current pet will disappear from the map and its state will be reset. Continue?",
+      "confirm": "Create new pet"
+    }
+  },
+  "proRacing": {
+    "menu": {
+      "title": "Main menu",
+      "hello": "Hi, {username}",
+      "diamonds": "Diamonds",
+      "carLevel": "Car level",
+      "mode": "Mode",
+      "normal": "Normal",
+      "normalDesc": "Classic run, WASD",
+      "hard": "Hard",
+      "hardDesc": "Faster and harsher modifiers",
+      "twoPlayers": "Two players",
+      "twoPlayersLocked": "Car level 3 required (now {level})",
+      "twoPlayersDesc": "Arrows — second player",
+      "more": "More",
+      "store": "Store & settings",
+      "leaderboard": "Leaderboard",
+      "backToHub": "Back to hub"
+    },
+    "abilities": {
+      "drugs": "Drugs",
+      "immue": "Immue",
+      "rockspeed": "Rockspeed",
+      "hearty": "Hearty"
+    },
+    "store": {
+      "title": "Store",
+      "diamondsSuffix": "diamonds",
+      "sound": "Sound",
+      "music": "In-game music",
+      "sfx": "Sound effects",
+      "car": "Car",
+      "carLevel": "Level: {level}",
+      "maxLevel": "Max level",
+      "upgradeFor": "Upgrade for {cost} dia.",
+      "carHint": "Improves the body level (visual in game).",
+      "nextCost": "Next step cost: {cost} diamonds.",
+      "superpowers": "Superpowers",
+      "price": "{cost} dia.",
+      "buy": "Buy",
+      "offer": {
+        "drugs": "Temporary boost",
+        "immue": "Short invulnerability",
+        "rockspeed": "Slow down rocks",
+        "hearty": "Survive a hit"
+      },
+      "toasts": {
+        "carUpgraded": "Car upgraded",
+        "purchased": "Purchased: {item}"
+      },
+      "errors": {
+        "maxCarLevel": "Car is at max level",
+        "alreadyPurchased": "Already purchased"
+      }
+    },
+    "leaderboard": {
+      "title": "Leaders",
+      "subtitle": "Top by survival record (seconds)",
+      "player": "Player",
+      "level": "Level",
+      "seconds": "Seconds",
+      "empty": "No records yet"
+    },
+    "game": {
+      "restart": "Restart",
+      "fieldAria": "Game field",
+      "connecting": "Connecting to game…",
+      "reconnect": "Reconnect",
+      "time": "Time",
+      "secondsShort": "s",
+      "speed": "Speed",
+      "kmh": "km/h",
+      "gameOverTitle": "Game over",
+      "survived": "You survived {seconds} s",
+      "winner": "Winner: {winner}",
+      "toMenu": "To menu",
+      "again": "Again",
+      "controlsPvp": "Player 1: WASD · Player 2: arrows",
+      "controls": "Controls: WASD or buttons below",
+      "abilitiesHint": "Abilities:"
+    }
+  },
+  "rps": {
+    "menu": {
+      "hint": "Choose a mode.",
+      "robot": "Robot",
+      "robotDesc": "Play against a bot (3 rounds).",
+      "online": "Online rooms",
+      "onlineDesc": "Create or join a room, optional diamond bet."
+    },
+    "onlineLobby": {
+      "hint": "Pick a room with a free slot.",
+      "room": "Room {n}"
+    },
+    "onlineRoom": {
+      "title": "Room {n}",
+      "betLabel": "Bet (diamonds)",
+      "chatTitle": "Chat",
+      "chatPlaceholder": "Message…"
+    },
+    "moves": {
+      "rock": "Rock",
+      "paper": "Paper",
+      "scissors": "Scissors"
+    },
+    "opponent": "Opponent",
+    "youChoice": "Your choice",
+    "verdict": {
+      "win": "Victory",
+      "lose": "Defeat",
+      "tie": "Draw"
+    },
+    "end": {
+      "eyebrow": "Match result (3 rounds)",
+      "titleWin": "Victory!",
+      "titleLose": "Defeat",
+      "titleTie": "Draw!",
+      "scoreLine": "You {player}:{opponent} {opponentLabel}",
+      "tieHint": "Equal number of wins — the match ended in a draw.",
+      "rewardPending": "A diamond will appear in your wallet soon…",
+      "rewardWon": "+1 diamond to your GameHub wallet",
+      "rewardLose": "Better luck next time!",
+      "restart": "Play again",
+      "exit": "Exit game"
+    },
+    "round": "Round {cur}/{total}"
+  },
+  "mc2d": {
+    "loot": {
+      "sand_block": "Sand",
+      "dirt_block": "Dirt",
+      "stone_block": "Stone",
+      "iron_block": "Iron",
+      "raw_diamond": "Raw diamond",
+      "apple": "Apple"
+    },
+    "nav": {
+      "hub": "Hub"
+    },
+    "wip": {
+      "unavailable": "Minecraft 2D Online is not available yet.",
+      "backToHub": "Back to hub"
+    },
+    "hud": {
+      "diamonds": "Diamonds: {diamonds}",
+      "depth": "Depth: {depth}",
+      "stamina": "Mining energy",
+      "pickaxe": "Pickaxe: {level}",
+      "dustTitle": "Diamond dust",
+      "exchangeRate": "Exchange: {rate} per 1 GameHub diamond",
+      "loot": "Loot"
+    },
+    "lobby": {
+      "queuePos": "Queue: position {pos}",
+      "hint": "Lobby — press “To world” if there is a slot (max 10).",
+      "joinWorld": "To world",
+      "leaveToLobby": "Leave to lobby"
+    },
+    "actions": {
+      "basePaid": "To base (1 diamond)",
+      "exchange": "Exchange 1 diamond → diamond dust",
+      "smeltAll": "Smelt all → diamond dust",
+      "smeltDetail": "stone ×{stone}, iron ×{iron}",
+      "eatApple": "Eat apple (+{energy} energy)",
+      "buyApple": "Buy apple ({dust} diamond dust)",
+      "deliverDiamond": "Deliver raw diamond (GameHub diamond)"
+    },
+    "escape": {
+      "pending": "Teleport in {seconds} s… Inventory will be cleared.",
+      "title": "Need a way out?",
+      "ghDiamonds": "GameHub diamonds: {diamonds}",
+      "noDiamonds": "No diamonds — you can do it for free, but inventory will reset and you’ll wait 10 s.",
+      "paid": "Teleport for 1 diamond",
+      "free": "Free (10 s, no wallet)"
+    },
+    "hint": {
+      "controls": "A/D — walk, Space — jump, click — mine, R — block (1/2/3). “To base” teleports home for 1 diamond.",
+      "persist": "Position is saved when you exit."
+    },
+    "exchange": {
+      "title": "Exchange diamond for diamond dust",
+      "rate": "Current rate: {rate} diamond dust for 1 diamond (8–20).",
+      "balance": "Diamond balance: {diamonds}",
+      "spend": "Spend 1 diamond"
+    },
+    "errors": {
+      "noBlocks": "No blocks in inventory"
+    },
+    "toasts": {
+      "weekReset": "New week: map updated",
+      "staminaGain": "+{amount} energy",
+      "appleBought": "Bought an apple (−{dust} diamond dust)",
+      "smelted": "+{dust} diamond dust (stone ×{stone}, iron ×{iron})",
+      "dustGain": "+{dust} diamond dust",
+      "teleportBase": "Teleported to base"
+    }
+  }
+}

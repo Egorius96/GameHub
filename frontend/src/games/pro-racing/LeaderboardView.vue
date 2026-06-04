@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { apiGet } from '../../api/client'
 import { useAuthStore } from '../../stores/auth'
 import { startPresencePing, stopPresencePing } from '../../telemetry/presence'
 
 const auth = useAuthStore()
 const router = useRouter()
+const { t } = useI18n()
 const users = ref<any[]>([])
 const loading = ref(true)
 
@@ -47,8 +49,8 @@ function medal(i: number): string {
     <section class="pr-shell">
       <header class="pr-head">
         <p class="pr-kicker">Pro Racing</p>
-        <h1 class="pr-title">Лидеры</h1>
-        <p class="pr-sub">Топ по рекорду выживания (секунды)</p>
+        <h1 class="pr-title">{{ t('proRacing.leaderboard.title') }}</h1>
+        <p class="pr-sub">{{ t('proRacing.leaderboard.subtitle') }}</p>
       </header>
 
       <div class="pr-table-wrap">
@@ -56,9 +58,9 @@ function medal(i: number): string {
           <thead>
             <tr>
               <th>#</th>
-              <th>Игрок</th>
-              <th>Уровень</th>
-              <th>Секунды</th>
+              <th>{{ t('proRacing.leaderboard.player') }}</th>
+              <th>{{ t('proRacing.leaderboard.level') }}</th>
+              <th>{{ t('proRacing.leaderboard.seconds') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -70,11 +72,11 @@ function medal(i: number): string {
             </tr>
           </tbody>
         </table>
-        <p v-else-if="!loading" class="pr-empty">Пока нет записей</p>
-        <p v-else class="pr-empty">Загрузка…</p>
+        <p v-else-if="!loading" class="pr-empty">{{ t('proRacing.leaderboard.empty') }}</p>
+        <p v-else class="pr-empty">{{ t('common.loading') }}</p>
       </div>
 
-      <button type="button" class="pr-back" @click="router.push('/menu')">← В меню</button>
+      <button type="button" class="pr-back" @click="router.push('/menu')">← {{ t('common.back') }}</button>
     </section>
   </main>
 </template>

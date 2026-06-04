@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../../stores/auth'
 import { playSfx } from '../../audio/sound'
 import { startPresencePing, stopPresencePing } from '../../telemetry/presence'
@@ -13,6 +14,7 @@ const PICK_TOTAL_SEC = 5
 const REVEAL_TOTAL_SEC = 5
 const router = useRouter()
 const auth = useAuthStore()
+const { t } = useI18n()
 
 type Mode = 'menu' | 'robot' | 'online_lobby' | 'online_room'
 const mode = ref<Mode>('menu')
@@ -67,9 +69,9 @@ const stakeLine = computed(() => {
 })
 
 const moveLabel: Record<string, string> = {
-  rock: 'Камень',
-  paper: 'Бумага',
-  scissors: 'Ножницы',
+  rock: t('rps.moves.rock'),
+  paper: t('rps.moves.paper'),
+  scissors: t('rps.moves.scissors'),
 }
 
 function oppMovesMap(move: string | null | undefined): Partial<Record<RpsMove, RpsMove | null>> {
@@ -124,7 +126,7 @@ const onlineRoundVerdict = computed((): RpsRoundVerdict => {
 })
 const onlineOpponentLabel = computed(() => {
   const you = roomState.value?.you as string
-  return (roomState.value?.players as string[])?.find((p: string) => p !== you) ?? 'Соперник'
+  return (roomState.value?.players as string[])?.find((p: string) => p !== you) ?? t('rps.opponent')
 })
 const onlineMatchTie = computed(() => {
   const lr = roomState.value?.last_round
@@ -146,11 +148,13 @@ const onlineEndScores = computed(() => {
 })
 const onlineRoundLabel = computed(() => {
   const r = Number(roomState.value?.round ?? 1)
-  return `Раунд ${Math.min(Math.max(1, r), MATCH_ROUNDS)}/${MATCH_ROUNDS}`
+  const cur = Math.min(Math.max(1, r), MATCH_ROUNDS)
+  return t('rps.round', { cur, total: MATCH_ROUNDS })
 })
 const robotRoundLabel = computed(() => {
   const r = Math.min(robotRoundsPlayed.value + (robotPhase.value === 'picking' ? 1 : 0), MATCH_ROUNDS)
-  return `Раунд ${Math.max(1, r)}/${MATCH_ROUNDS}`
+  const cur = Math.max(1, r)
+  return t('rps.round', { cur, total: MATCH_ROUNDS })
 })
 
 let robotPickEndsAt = 0
@@ -668,21 +672,21 @@ watch(
   <main class="page page-menu rps-page">
     <section class="panel rps-shell">
       <header class="rps-head">
-        <h1 class="rps-title">Камень · Ножницы · Бумага</h1>
+        <h1 class="rps-title">Rock · Paper · Scissors</h1>
         <div class="rps-head-actions">
-          <span ref="diamondHudRef" class="rps-diamonds">💎 Алмазы: {{ diamonds }}</span>
-          <button type="button" class="btn rps-btn-ghost" @click="goMenu" v-if="mode !== 'menu'">В меню режимов</button>
-          <button type="button" class="btn" @click="exitHub">В хаб</button>
+          <span ref="diamondHudRef" class="rps-diamonds">💎 {{ t('hub.diamonds') }}: {{ diamonds }}</span>
+          <button type="button" class="btn rps-btn-ghost" @click="goMenu" v-if="mode !== 'menu'">{{ t('common.back') }}</button>
+          <button type="button" class="btn" @click="exitHub">{{ t('common.back') }}</button>
         </div>
       </header>
 
       <div v-if="mode === 'menu'" class="rps-menu">
-        <p class="rps-hint">Классические правила. Выберите режим.</p>
+        <p class="rps-hint">{{ t('rps.menu.hint') }}</p>
         <div class="rps-menu-grid">
-          <button type="button" class="btn rps-big" @click="openRobot">Игра с роботом</button>
-          <p class="rps-card-note">До 3 раундов; при 2:0 третий не играется. Победитель — 1 алмаз.</p>
-          <button type="button" class="btn rps-big" @click="openOnlineLobby">Онлайн — комнаты</button>
-          <p class="rps-card-note">5 комнат, ставки 1–5. До 3 раундов, при 2:0 — досрочный финиш.</p>
+          <button type="button" class="btn rps-big" @click="openRobot">{{ t('rps.menu.robot') }}</button>
+          <p class="rps-card-note">{{ t('rps.menu.robotDesc') }}</p>
+          <button type="button" class="btn rps-big" @click="openOnlineLobby">{{ t('rps.menu.online') }}</button>
+          <p class="rps-card-note">{{ t('rps.menu.onlineDesc') }}</p>
         </div>
       </div>
 
@@ -691,9 +695,9 @@ watch(
         <div v-if="robotSession && !showRobotEndModal" class="rps-play-layout">
           <aside class="rps-hud-sidebar" aria-label="Счёт и таймер">
             <div class="rps-hud-stat rps-hud-stat--opp">
-              <span class="rps-hud-stat-label">Робот</span>
+              <span class="rps-hud-stat-label">{{ t('rps.opponent') }}</span>
               <span class="rps-hud-stat-value" :key="'rw-' + robotWins">{{ robotWins }}</span>
-              <span class="rps-hud-stat-hint">побед</span>
+              <span class="rps-hud-stat-hint">{{ t('rps.verdict.win') }}</span>
             </div>
             <div
               v-if="!robotFinished"
@@ -717,12 +721,12 @@ watch(
                 </svg>
                 <span class="rps-hud-timer-num" :key="`rt-${robotPhase}-${robotTimerSec}`">{{ robotTimerSec }}</span>
               </div>
-              <span class="rps-hud-timer-unit">сек</span>
+              <span class="rps-hud-timer-unit">s</span>
             </div>
             <div class="rps-hud-stat rps-hud-stat--you">
-              <span class="rps-hud-stat-label">Вы</span>
+              <span class="rps-hud-stat-label">{{ t('rps.youChoice') }}</span>
               <span class="rps-hud-stat-value" :key="'pw-' + playerWins">{{ playerWins }}</span>
-              <span class="rps-hud-stat-hint">побед</span>
+              <span class="rps-hud-stat-hint">{{ t('rps.verdict.win') }}</span>
             </div>
           </aside>
           <div class="rps-play-main">
@@ -738,7 +742,7 @@ watch(
           </div>
         </div>
         <div v-else class="rps-robot-actions">
-          <button type="button" class="btn" :disabled="robotBusy" @click="startRobotMatch">Начать партию</button>
+          <button type="button" class="btn" :disabled="robotBusy" @click="startRobotMatch">{{ t('rps.end.restart') }}</button>
         </div>
         <ul v-if="robotLog.length" class="rps-log">
           <li v-for="(line, i) in robotLog" :key="i">{{ line }}</li>
@@ -747,7 +751,7 @@ watch(
 
       <div v-else-if="mode === 'online_lobby'" class="rps-lobby">
         <p v-if="onlineError" class="rps-err">{{ onlineError }}</p>
-        <p class="rps-hint">Занято = 2 игрока подключены по сети. Войти нельзя.</p>
+        <p class="rps-hint">{{ t('rps.onlineLobby.hint') }}</p>
         <div class="rps-room-grid">
           <button
             v-for="r in rooms"
@@ -757,7 +761,7 @@ watch(
             :disabled="r.occupancy >= 2"
             @click="enterOnlineRoom(r.room_id)"
           >
-            Комната {{ r.room_id + 1 }}
+            {{ t('rps.onlineLobby.room', { n: r.room_id + 1 }) }}
             <span class="rps-room-meta">{{ r.occupancy }} / 2</span>
           </button>
         </div>
@@ -765,23 +769,23 @@ watch(
 
       <div v-else-if="mode === 'online_room' && roomState" class="rps-online">
         <p v-if="onlineError" class="rps-err">{{ onlineError }}</p>
-        <h2 class="rps-sub">Комната {{ onlineRoomId + 1 }} · {{ roomState.phase === 'waiting' ? 'ожидание' : roomState.phase === 'betting' ? 'ставки' : 'матч' }}</h2>
-        <p class="rps-hint">Игроки: {{ (roomState.players || []).join(', ') || '—' }}</p>
+        <h2 class="rps-sub">{{ t('rps.onlineRoom.title', { n: onlineRoomId + 1 }) }}</h2>
+        <p class="rps-hint">{{ (roomState.players || []).join(', ') || '—' }}</p>
 
         <div v-if="roomState.phase === 'betting'" class="rps-bet-block">
-          <label class="rps-bet-label">Ставка (1–5)</label>
+          <label class="rps-bet-label">{{ t('rps.onlineRoom.betLabel') }}</label>
           <input v-model.number="betAmount" class="admin-input rps-bet-input" type="number" min="1" max="5" />
-          <button type="button" class="btn" @click="sendBetReady">Готов</button>
+          <button type="button" class="btn" @click="sendBetReady">{{ t('common.ok') }}</button>
         </div>
 
         <div v-if="roomState.phase === 'playing'" class="rps-match">
-          <div class="rps-pot">Банк: {{ roomState.pot }} · {{ stakeLine }}</div>
+          <div class="rps-pot">{{ roomState.pot }} · {{ stakeLine }}</div>
           <div v-if="!showOnlineEndModal" class="rps-play-layout">
             <aside class="rps-hud-sidebar" aria-label="Счёт и таймер">
               <div class="rps-hud-stat rps-hud-stat--opp">
                 <span class="rps-hud-stat-label">{{ onlineOpponentLabel }}</span>
                 <span class="rps-hud-stat-value" :key="'oow-' + onlineEndScores.opponent">{{ onlineEndScores.opponent }}</span>
-                <span class="rps-hud-stat-hint">побед</span>
+                <span class="rps-hud-stat-hint">{{ t('rps.verdict.win') }}</span>
               </div>
               <div
                 class="rps-hud-timer"
@@ -804,12 +808,12 @@ watch(
                   </svg>
                   <span class="rps-hud-timer-num" :key="`ot-${onlineRoundPhase}-${onlineTimerSec}`">{{ onlineTimerSec }}</span>
                 </div>
-                <span class="rps-hud-timer-unit">сек</span>
+                <span class="rps-hud-timer-unit">s</span>
               </div>
               <div class="rps-hud-stat rps-hud-stat--you">
-                <span class="rps-hud-stat-label">Вы</span>
+                <span class="rps-hud-stat-label">{{ t('rps.youChoice') }}</span>
                 <span class="rps-hud-stat-value" :key="'opw-' + onlineEndScores.player">{{ onlineEndScores.player }}</span>
-                <span class="rps-hud-stat-hint">побед</span>
+                <span class="rps-hud-stat-hint">{{ t('rps.verdict.win') }}</span>
               </div>
             </aside>
             <div class="rps-play-main">
@@ -827,21 +831,21 @@ watch(
         </div>
 
         <div class="rps-chat">
-          <h3 class="rps-chat-title">Чат</h3>
+          <h3 class="rps-chat-title">{{ t('rps.onlineRoom.chatTitle') }}</h3>
           <div class="rps-chat-log">
             <div v-for="(m, idx) in roomState.chat || []" :key="idx" class="rps-chat-line">
               <b>{{ m.from }}:</b> {{ m.text }}
             </div>
           </div>
           <div class="rps-chat-row">
-            <input v-model="chatDraft" class="admin-input rps-chat-input" maxlength="400" placeholder="Сообщение…" @keydown.enter.prevent="sendChat" />
-            <button type="button" class="btn" @click="sendChat">Отправить</button>
+            <input v-model="chatDraft" class="admin-input rps-chat-input" maxlength="400" :placeholder="t('rps.onlineRoom.chatPlaceholder')" @keydown.enter.prevent="sendChat" />
+            <button type="button" class="btn" @click="sendChat">{{ t('common.ok') }}</button>
           </div>
         </div>
       </div>
 
       <div v-else-if="mode === 'online_room'" class="rps-online">
-        <p class="rps-hint">Подключение…</p>
+        <p class="rps-hint">{{ t('common.loading') }}</p>
       </div>
     </section>
 

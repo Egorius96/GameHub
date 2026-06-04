@@ -53,3 +53,27 @@ export async function apiGet<T>(path: string, token: string): Promise<T> {
   }
   return response.json() as Promise<T>
 }
+
+export async function apiPatch<T>(path: string, payload: unknown, token?: string): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) {
+    const text = await response.text()
+    const body = parseErrorBody(text)
+    const detail = (body as { detail?: unknown }).detail
+    const msg =
+      typeof detail === 'string'
+        ? detail
+        : detail && typeof detail === 'object' && 'code' in (detail as object)
+          ? String((detail as { code?: string }).code ?? 'Error')
+          : `HTTP ${response.status}`
+    throw new ApiHttpError(msg, response.status, body)
+  }
+  return response.json() as Promise<T>
+}

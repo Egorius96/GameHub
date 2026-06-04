@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
 import { playSfx } from '../audio/sound'
 import { startPresencePing, stopPresencePing } from '../telemetry/presence'
@@ -9,6 +10,7 @@ import { TEAM_TERRITORY_COMING_SOON } from '../config/features'
 const GAME_KEY = 'team_territory'
 const router = useRouter()
 const auth = useAuthStore()
+const { t } = useI18n()
 
 const roomId = ref('default')
 const error = ref<string | null>(null)
@@ -44,7 +46,7 @@ function teamStyle(teamId: number) {
 function connectWs() {
   error.value = null
   if (!auth.token) {
-    error.value = 'Нет токена'
+    error.value = t('errors.unauthorized')
     return
   }
   wsRef.value?.close()
@@ -60,9 +62,9 @@ function connectWs() {
         payload.value = msg.payload
         if (msg.payload.phase === 'finished' && prev !== 'finished') void auth.refreshProfile()
       } else if (msg.type === 'error') {
-        error.value = String(msg.message ?? 'Ошибка')
+        error.value = String(msg.message ?? t('errors.generic'))
       } else if (msg.type === 'buy_paint_result' && msg.payload && !msg.payload.ok) {
-        error.value = String(msg.payload.error ?? 'Покупка не удалась')
+        error.value = String(msg.payload.error ?? t('errors.generic'))
       }
     } catch {
       /* ignore */
@@ -168,18 +170,18 @@ onBeforeUnmount(() => {
 <template>
   <div v-if="TEAM_TERRITORY_COMING_SOON" class="tt-wip">
     <header class="tt-header">
-      <button type="button" class="btn tt-back" @click="router.push('/games')">← Хаб</button>
+      <button type="button" class="btn tt-back" @click="router.push('/games')">← {{ t('teamTerritory.nav.hub') }}</button>
       <h1 class="tt-title">Team Territory</h1>
     </header>
     <div class="tt-wip-card card">
-      <h2 class="tt-wip-title">Игра в разработке</h2>
-      <p class="tt-wip-text">Team Territory пока недоступна.</p>
-      <button type="button" class="btn btn-primary" @click="router.push('/games')">Вернуться в хаб</button>
+      <h2 class="tt-wip-title">{{ t('hub.status.inDevelopment') }}</h2>
+      <p class="tt-wip-text">{{ t('teamTerritory.wip.unavailable') }}</p>
+      <button type="button" class="btn btn-primary" @click="router.push('/games')">{{ t('teamTerritory.wip.backToHub') }}</button>
     </div>
   </div>
   <div v-else class="tt-root">
     <header class="tt-header">
-      <button type="button" class="btn tt-back" @click="router.push('/games')">← Хаб</button>
+      <button type="button" class="btn tt-back" @click="router.push('/games')">← {{ t('teamTerritory.nav.hub') }}</button>
       <h1 class="tt-title">Team Territory</h1>
       <div class="tt-wallet">💎 {{ diamonds }}</div>
     </header>
@@ -188,19 +190,19 @@ onBeforeUnmount(() => {
     <div v-if="error" class="tt-err">{{ error }}</div>
 
     <section v-if="isSpectator" class="tt-banner">
-      Наблюдатель: закраска недоступна. Дождитесь следующего матча.
-      <span v-if="me.spectator_queue_position"> Очередь: {{ me.spectator_queue_position }}</span>
+      {{ t('teamTerritory.spectator.banner') }}
+      <span v-if="me.spectator_queue_position"> {{ t('teamTerritory.spectator.queue', { pos: me.spectator_queue_position }) }}</span>
     </section>
 
     <section v-if="phase === 'lobby'" class="tt-lobby card">
-      <h2>Лобби</h2>
-      <p class="muted">Комната: <strong>{{ roomId }}</strong></p>
+      <h2>{{ t('teamTerritory.lobby.title') }}</h2>
+      <p class="muted">{{ t('teamTerritory.lobby.room', { roomId }) }}</p>
       <label class="tt-field">
-        <span>ID комнаты</span>
+        <span>{{ t('teamTerritory.lobby.roomId') }}</span>
         <input v-model="roomId" class="tt-input" @change="connectWs" />
       </label>
       <div class="tt-row">
-        <span>Команд:</span>
+        <span>{{ t('teamTerritory.lobby.teams') }}</span>
         <button type="button" class="btn" @click="setNumTeams(2)">2</button>
         <button type="button" class="btn" @click="setNumTeams(3)">3</button>
         <button type="button" class="btn" @click="setNumTeams(4)">4</button>
@@ -208,25 +210,25 @@ onBeforeUnmount(() => {
       <div class="tt-players">
         <div v-for="(slot, u) in payload?.players ?? {}" :key="u" class="tt-pl">
           <span>{{ u }}</span>
-          <span class="muted">команда {{ (slot?.team_id ?? 0) + 1 }}</span>
-          <span v-if="slot?.ready" class="ok">готов</span>
+          <span class="muted">{{ t('teamTerritory.lobby.teamN', { team: (slot?.team_id ?? 0) + 1 }) }}</span>
+          <span v-if="slot?.ready" class="ok">{{ t('teamTerritory.lobby.readyFlag') }}</span>
         </div>
       </div>
-      <button type="button" class="btn btn-primary tt-ready" @click="setReady(true)">Готов</button>
+      <button type="button" class="btn btn-primary tt-ready" @click="setReady(true)">{{ t('teamTerritory.lobby.ready') }}</button>
     </section>
 
     <section v-if="phase === 'playing' || phase === 'finished'" class="tt-match">
       <div class="tt-hud card">
-        <div>Тик #{{ payload?.tick_index ?? 0 }}</div>
-        <div v-if="msToNextTick != null" class="tt-timer">До закрытия тика: {{ Math.ceil(msToNextTick / 1000) }} с</div>
-        <div>Краска: <strong>{{ me.paint ?? 0 }}</strong> / {{ cfg.paint_max ?? 10 }}</div>
-        <div class="muted">Чужая краска (сумма): {{ payload?.opponent_ink?.sum ?? 0 }}</div>
+        <div>{{ t('teamTerritory.match.tick', { tick: payload?.tick_index ?? 0 }) }}</div>
+        <div v-if="msToNextTick != null" class="tt-timer">{{ t('teamTerritory.match.tickCloseIn', { seconds: Math.ceil(msToNextTick / 1000) }) }}</div>
+        <div>{{ t('teamTerritory.match.paint', { cur: me.paint ?? 0, max: cfg.paint_max ?? 10 }) }}</div>
+        <div class="muted">{{ t('teamTerritory.match.opponentInk', { sum: payload?.opponent_ink?.sum ?? 0 }) }}</div>
         <div v-if="stall.phase === 'warn' && msStallLeft != null" class="tt-stall">
-          Нет действий — ничья через {{ Math.ceil(msStallLeft / 1000) }} с
+          {{ t('teamTerritory.match.stall', { seconds: Math.ceil(msStallLeft / 1000) }) }}
         </div>
         <div class="tt-actions">
           <button type="button" class="btn" :disabled="isSpectator" @click="buyPaint">
-            Купить +{{ cfg.bundle }} ({{ cfg.diamond_cost }} 💎)
+            {{ t('teamTerritory.match.buyPaint', { amount: cfg.bundle, cost: cfg.diamond_cost }) }}
           </button>
           <button type="button" class="btn" :disabled="isSpectator || !!challenge" @click="startChallenge">Challenge</button>
         </div>
@@ -251,32 +253,32 @@ onBeforeUnmount(() => {
       </div>
 
       <div v-if="phase === 'finished'" class="tt-result card">
-        <h2>Матч окончен</h2>
+        <h2>{{ t('teamTerritory.finish.title') }}</h2>
         <p>{{ payload?.finish_reason }}</p>
-        <p>Счёт по командам: {{ JSON.stringify(payload?.scores ?? {}) }}</p>
-        <p v-if="(payload?.winning_team_ids ?? []).length">Победили команды: {{ payload?.winning_team_ids?.map((x: number) => x + 1).join(', ') }}</p>
-        <button type="button" class="btn btn-primary" @click="resetLobby">В лобби</button>
+        <p>{{ t('teamTerritory.finish.scores') }}: {{ JSON.stringify(payload?.scores ?? {}) }}</p>
+        <p v-if="(payload?.winning_team_ids ?? []).length">{{ t('teamTerritory.finish.winners') }}: {{ payload?.winning_team_ids?.map((x: number) => x + 1).join(', ') }}</p>
+        <button type="button" class="btn btn-primary" @click="resetLobby">{{ t('teamTerritory.finish.backToLobby') }}</button>
       </div>
     </section>
 
     <div v-if="challenge" class="tt-ch-overlay" @click.self>
       <div class="tt-ch card" :class="{ 'tt-ch--nomotion': reducedMotion }">
-        <h3>Challenge · режим {{ challenge.mode }}</h3>
+        <h3>{{ t('teamTerritory.challenge.title', { mode: challenge.mode }) }}</h3>
         <p v-if="challenge.round_deadline_at" class="muted">
-          Дедлайн раунда: {{ new Date(challenge.round_deadline_at).toLocaleTimeString() }}
+          {{ t('teamTerritory.challenge.deadline', { time: new Date(challenge.round_deadline_at).toLocaleTimeString() }) }}
         </p>
         <template v-if="Number(challenge.mode) === 1">
           <p class="tt-prompt">{{ challenge.prompt }}</p>
           <input v-model="mathAnswer" class="tt-input" type="number" @keyup.enter="submitChallenge" />
-          <button type="button" class="btn btn-primary" @click="submitChallenge">Ответить</button>
+          <button type="button" class="btn btn-primary" @click="submitChallenge">{{ t('teamTerritory.challenge.submit') }}</button>
         </template>
         <template v-else-if="Number(challenge.mode) === 2">
           <p class="tt-prompt">{{ challenge.prompt }}</p>
           <input v-model="spellAnswer" maxlength="1" class="tt-input" @keyup.enter="submitChallenge" />
-          <button type="button" class="btn btn-primary" @click="submitChallenge">Буква</button>
+          <button type="button" class="btn btn-primary" @click="submitChallenge">{{ t('teamTerritory.challenge.letter') }}</button>
         </template>
         <template v-else-if="Number(challenge.mode) === 3">
-          <p>Следующий: <strong>{{ challenge.sequence_next }}</strong></p>
+          <p>{{ t('teamTerritory.challenge.next') }}: <strong>{{ challenge.sequence_next }}</strong></p>
           <div class="tt-circles">
             <button
               v-for="c in challenge.circles ?? []"

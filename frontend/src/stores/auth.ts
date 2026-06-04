@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
-import { apiGet, apiPost } from '../api/client'
+import { apiGet, apiPatch, apiPost } from '../api/client'
+import { setUiLocale, type UiLang } from '../i18n'
 import { clearStoredAuth, loadStoredAuth, saveStoredAuth } from './authStorage'
 
 interface AuthResp {
@@ -32,6 +33,7 @@ export const useAuthStore = defineStore('auth', {
       this.token = token
       this.username = username
       this.otherData = otherData
+      setUiLocale(String(otherData.ui_lang ?? 'en'))
       this.persist()
     },
     async signIn(username: string, password: string) {
@@ -47,6 +49,7 @@ export const useAuthStore = defineStore('auth', {
       const data = await apiGet<{ username: string; other_data: Record<string, unknown> }>('/profile', this.token)
       this.username = data.username
       this.otherData = data.other_data
+      setUiLocale(String(data.other_data.ui_lang ?? 'en'))
       this.persist()
     },
     /** Восстановить сессию после F5; при невалидном JWT — выход */
@@ -60,6 +63,18 @@ export const useAuthStore = defineStore('auth', {
     },
     mergeOtherData(partial: Record<string, unknown>) {
       this.otherData = { ...this.otherData, ...partial }
+      if ('ui_lang' in partial) setUiLocale(String(partial.ui_lang ?? 'en'))
+      this.persist()
+    },
+    async setUiLang(lang: UiLang) {
+      if (!this.token) return
+      const data = await apiPatch<{ ok: boolean; other_data: Record<string, unknown> }>(
+        '/profile',
+        { ui_lang: lang },
+        this.token,
+      )
+      this.otherData = data.other_data
+      setUiLocale(lang)
       this.persist()
     },
     logout() {

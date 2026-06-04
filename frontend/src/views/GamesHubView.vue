@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
+import type { UiLang } from '../i18n'
+import { tamagochiStatus } from '../games/tamagochi/api'
 import { playSfx, stopMusic } from '../audio/sound'
 import { startPresencePing, stopPresencePing } from '../telemetry/presence'
 import { MINECRAFT_2D_COMING_SOON, TEAM_TERRITORY_COMING_SOON } from '../config/features'
 
 const router = useRouter()
 const auth = useAuthStore()
+const { t: i18nT } = useI18n()
 const catalog = ref<Record<string, any>>({})
 const presence = ref<{ online_total: number; online_users: string[]; by_game: Record<string, number> }>({
   online_total: 0,
@@ -15,6 +19,34 @@ const presence = ref<{ online_total: number; online_users: string[]; by_game: Re
   by_game: {},
 })
 let presenceTimer: number | null = null
+let tamagochiReminderTimer: number | null = null
+let lastTamagochiReminderAt = 0
+
+const uiLang = computed(() => String((auth.otherData as any).ui_lang ?? 'en') as UiLang)
+
+async function onLangChange(ev: Event) {
+  const v = (ev.target as HTMLSelectElement).value as UiLang
+  try {
+    await auth.setUiLang(v)
+    showToast(i18nT('hub.language') + ': ' + v.toUpperCase())
+  } catch {
+    showToast(i18nT('errors.generic'), 'error')
+  }
+}
+
+async function checkTamagochiReminder() {
+  if (!auth.token) return
+  try {
+    const st = await tamagochiStatus(auth.token)
+    if (!st.needs_attention) return
+    const now = Date.now()
+    if (now - lastTamagochiReminderAt < 120_000) return
+    lastTamagochiReminderAt = now
+    const msg =
+      st.reason === 'critical' ? i18nT('hub.tamagochiReminderCritical') : i18nT('hub.tamagochiReminderHungry')
+    showToast(msg)
+  } catch {}
+}
 
 async function reloadGamesCatalog() {
   if (!auth.token) return
@@ -36,7 +68,7 @@ onMounted(async () => {
     const resp = await fetch('/api/likes/summary', { headers: { Authorization: `Bearer ${auth.token}` } })
     if (resp.ok) likes.value = await resp.json()
   } catch {
-    showToast('Лайки: ошибка сети', 'error')
+    showToast(i18nT('hub.likesNetworkError'), 'error')
   }
   await reloadGamesCatalog()
 
@@ -49,6 +81,8 @@ onMounted(async () => {
   void loadPresence()
   void loadMessengerUnread()
   messengerUnreadTimer = window.setInterval(loadMessengerUnread, 20000)
+  void checkTamagochiReminder()
+  tamagochiReminderTimer = window.setInterval(checkTamagochiReminder, 60_000)
 })
 
 onBeforeUnmount(() => {
@@ -56,6 +90,8 @@ onBeforeUnmount(() => {
   if (presenceTimer) window.clearInterval(presenceTimer)
   if (messengerUnreadTimer) window.clearInterval(messengerUnreadTimer)
   messengerUnreadTimer = null
+  if (tamagochiReminderTimer) window.clearInterval(tamagochiReminderTimer)
+  tamagochiReminderTimer = null
 })
 
 const diamonds = computed(() => Number((auth.otherData as any).diamonds ?? 0))
@@ -84,7 +120,7 @@ const avatarUrl = computed(() => {
   return u && String(u).length ? String(u) : ''
 })
 
-/** Статический URL аватара не меняется при замене файла — без версии браузер показывает закэшированное изображение */
+/** Avatar URL is static; add version to bust browser cache. */
 const avatarVersion = ref(0)
 const avatarImgSrc = computed(() => {
   const base = avatarUrl.value
@@ -106,7 +142,7 @@ const likes = ref<{ day: string; counts: Record<string, number>; my_vote: string
 })
 const messengerUnread = ref(0)
 let messengerUnreadTimer: number | null = null
-/** Исходный файл изображения до сжатия на сервере (аватар и фото автора игры). */
+/** Original image before server-side compression (avatar and author photo). */
 const MAX_UPLOAD_IMAGE_BEFORE_COMPRESS = 5 * 1024 * 1024
 type HubToast = { id: number; message: string; variant: 'info' | 'error' }
 const toasts = ref<HubToast[]>([])
@@ -120,7 +156,7 @@ function showToast(message: string, variant: 'info' | 'error' = 'info') {
   }, 4200)
 }
 
-const CREATOR_EMPTY_MESSAGE = 'Автор пока не добавил текст.'
+const CREATOR_EMPTY_MESSAGE = i18nT('hub.creator.empty')
 
 const openCreatorKey = ref<string | null>(null)
 const creatorMediaVersion = ref(0)
@@ -164,7 +200,7 @@ function openIamAuthor(gameKey: string) {
   playSfx('button')
   const meta = catalog.value[gameKey] as { author_password_configured?: boolean } | undefined
   if (!meta?.author_password_configured) {
-    showToast('В переменных окружения не задан пароль автора для этой игры.', 'error')
+    showToast(i18nT('hub.creator.notConfigured'), 'error')
     return
   }
   authorGameKey.value = gameKey
@@ -201,20 +237,20 @@ function applyAuthorCatalogPatch(
 function handleAuthorApiError(resp: Response, data: { detail?: unknown }) {
   if (resp.status === 413) {
     authorModalError.value =
-      'Фото слишком много весит (лимит 5 МБ до сжатия) или на шлюзе слишком маленький лимит тела запроса — перезапустите nginx с актуальным конфигом.'
+      i18nT('hub.creator.fileTooLarge')
     return
   }
   const { code, message } = parseCreatorDetail(data)
   if (code === 'author_password_not_configured') {
-    showToast(message || 'В переменных окружения не задан пароль автора для этой игры.', 'error')
+    showToast(message || i18nT('hub.creator.notConfigured'), 'error')
     closeAuthorModal()
   } else if (code === 'wrong_author_password') {
-    showToast(message || 'Пароль неверный.', 'error')
+    showToast(message || i18nT('hub.creator.wrongPassword'), 'error')
   } else if (code === 'creator_file_too_large') {
-    authorModalError.value = message || 'Фото слишком много весит: максимум 5 МБ до сжатия на сервере.'
+    authorModalError.value = message || i18nT('hub.creator.fileTooLarge')
   } else {
     authorModalError.value =
-      typeof data.detail === 'string' ? data.detail : message || 'Не удалось выполнить действие'
+      typeof data.detail === 'string' ? data.detail : message || i18nT('errors.generic')
   }
 }
 
@@ -222,10 +258,10 @@ async function resetAuthorBlock() {
   authorModalError.value = ''
   const pwd = authorPassword.value.trim()
   if (!pwd) {
-    authorModalError.value = 'Введите пароль автора'
+    authorModalError.value = i18nT('hub.creator.password')
     return
   }
-  if (!window.confirm('Удалить весь текст и фото в блоке «от автора» для этой игры?')) return
+  if (!window.confirm(i18nT('hub.creator.reset'))) return
   playSfx('button')
   authorSubmitting.value = true
   try {
@@ -247,7 +283,7 @@ async function resetAuthorBlock() {
       handleAuthorApiError(resp, data)
       return
     }
-    showToast('Блок автора сброшен', 'info')
+    showToast(i18nT('common.saved'), 'info')
     creatorMediaVersion.value = Date.now()
     applyAuthorCatalogPatch(authorGameKey.value, {
       creator_message: '',
@@ -260,7 +296,7 @@ async function resetAuthorBlock() {
     authorPassword.value = ''
     authorModalError.value = ''
   } catch {
-    authorModalError.value = 'Сеть: ошибка запроса'
+    authorModalError.value = i18nT('hub.delete.networkError')
   } finally {
     authorSubmitting.value = false
   }
@@ -270,19 +306,19 @@ async function submitAuthorBlock() {
   authorModalError.value = ''
   const pwd = authorPassword.value.trim()
   if (!pwd) {
-    authorModalError.value = 'Введите пароль автора'
+    authorModalError.value = i18nT('hub.creator.password')
     return
   }
   const file = authorFileInputRef.value?.files?.[0] ?? null
   if (file && file.size > MAX_UPLOAD_IMAGE_BEFORE_COMPRESS) {
-    authorModalError.value = 'Фото слишком много весит: максимум 5 МБ до сжатия на сервере.'
+    authorModalError.value = i18nT('hub.creator.fileTooLarge')
     return
   }
   const initialMsg = creatorMessageForDisplay(catalog.value[authorGameKey.value]?.creator_message) ?? ''
   const nextMsg = authorMessage.value.trim()
   const msgChanged = nextMsg !== initialMsg
   if (!file && !msgChanged) {
-    authorModalError.value = 'Измените текст или выберите фото'
+    authorModalError.value = i18nT('errors.generic')
     return
   }
   authorSubmitting.value = true
@@ -311,7 +347,7 @@ async function submitAuthorBlock() {
       handleAuthorApiError(resp, data)
       return
     }
-    showToast('Сохранено', 'info')
+    showToast(i18nT('common.saved'), 'info')
     creatorMediaVersion.value = Date.now()
     applyAuthorCatalogPatch(authorGameKey.value, data)
     await reloadGamesCatalog()
@@ -320,7 +356,7 @@ async function submitAuthorBlock() {
     authorModalError.value = ''
     if (authorFileInputRef.value) authorFileInputRef.value.value = ''
   } catch {
-    authorModalError.value = 'Сеть: ошибка запроса'
+    authorModalError.value = i18nT('hub.delete.networkError')
   } finally {
     authorSubmitting.value = false
   }
@@ -332,9 +368,9 @@ function mapLikeErrorDetail(detail: unknown): string {
   else if (Array.isArray(detail) && detail.length && typeof (detail[0] as { msg?: string }).msg === 'string') {
     s = (detail[0] as { msg: string }).msg
   }
-  if (s === 'Already voted today') return 'Сегодня вы уже голосовали — можно лайкнуть только одну игру в день.'
-  if (s === 'Account blocked') return 'Аккаунт заблокирован.'
-  return s || 'Не удалось поставить лайк'
+  if (s === 'Already voted today') return i18nT('errors.generic')
+  if (s === 'Account blocked') return i18nT('errors.generic')
+  return s || i18nT('errors.generic')
 }
 
 async function onAvatarFile(ev: Event) {
@@ -342,7 +378,7 @@ async function onAvatarFile(ev: Event) {
   const file = input.files?.[0]
   if (!file) return
   if (file.size > MAX_UPLOAD_IMAGE_BEFORE_COMPRESS) {
-    avatarError.value = 'Фото слишком много весит: максимум 5 МБ до сжатия на сервере.'
+    avatarError.value = i18nT('hub.creator.fileTooLarge')
     input.value = ''
     return
   }
@@ -360,8 +396,8 @@ async function onAvatarFile(ev: Event) {
       const d = (await resp.json().catch(() => ({}))) as { detail?: unknown }
       const det = d.detail
       avatarError.value = Array.isArray(det)
-        ? String((det[0] as any)?.msg ?? det[0] ?? 'Ошибка')
-        : String(det ?? 'Не удалось загрузить')
+        ? String((det[0] as any)?.msg ?? det[0] ?? i18nT('errors.generic'))
+        : String(det ?? i18nT('hub.avatar.uploadError'))
       return
     }
     const uploaded = (await resp.json()) as { avatar_url?: string }
@@ -374,7 +410,7 @@ async function onAvatarFile(ev: Event) {
     }
     avatarVersion.value = Date.now()
   } catch {
-    avatarError.value = 'Сеть: не удалось загрузить'
+    avatarError.value = i18nT('common.networkError')
   } finally {
     input.value = ''
   }
@@ -387,7 +423,7 @@ function fmtPlaytime(totalSeconds: number): string {
   const minutes = totalMinutes % 60
   const hh = String(hours).padStart(2, '0')
   const mm = String(minutes).padStart(2, '0')
-  return `${hh} часов ${mm} минут`
+  return `${hh}:${mm}`
 }
 
 function openProRacing() {
@@ -488,7 +524,7 @@ async function likeGame(gameKey: string) {
     }
     likes.value = data
   } catch {
-    showToast('Сеть: не удалось поставить лайк', 'error')
+    showToast(i18nT('common.networkError'), 'error')
   }
 }
 
@@ -496,8 +532,8 @@ const gamesForTop = computed(() => {
   const counts = likes.value.counts ?? {}
   const list = [
     { key: 'misha_pro_racing_game', title: 'Pro Racing', open: openProRacing },
-    { key: 'rps_game', title: 'Камень ножницы бумага', open: openRps },
-    { key: 'tamagochi_world_game', title: 'Тамагочи World', open: openTamagochi },
+    { key: 'rps_game', title: 'Rock Paper Scissors', open: openRps },
+    { key: 'tamagochi_world_game', title: 'Tamagochi World', open: openTamagochi },
     { key: 'team_territory', title: 'Team Territory', open: openTeamTerritory },
     { key: 'minecraft_2d_online', title: 'Minecraft 2D Online', open: openMinecraft2D },
   ]
@@ -526,7 +562,7 @@ function apiDetailMessage(data: { detail?: unknown }): string {
   if (Array.isArray(d) && d.length && typeof (d[0] as { msg?: string }).msg === 'string') {
     return (d[0] as { msg: string }).msg
   }
-  return 'Не удалось удалить аккаунт'
+  return i18nT('errors.generic')
 }
 
 async function confirmDeleteAccount() {
@@ -550,7 +586,7 @@ async function confirmDeleteAccount() {
     auth.logout()
     router.push('/')
   } catch {
-    deleteError.value = 'Сеть: ошибка запроса'
+    deleteError.value = i18nT('hub.delete.networkError')
   } finally {
     deleteLoading.value = false
   }
@@ -561,13 +597,13 @@ async function confirmDeleteAccount() {
   <main class="page page-menu">
     <section class="panel" style="display:flex; gap:12px; align-items:stretch;">
       <aside class="hub-aside">
-        <h3 style="margin:0 0 10px 0;">Account</h3>
+        <h3 style="margin:0 0 10px 0;">{{ i18nT('hub.account') }}</h3>
         <div v-if="modWarning && (modWarning.text || (modWarning.level ?? 0) > 0)" class="hub-warning">
-          <div class="hub-warning-title">Система безопасности</div>
+          <div class="hub-warning-title">{{ i18nT('errors.generic') }}</div>
           <div v-if="modWarning.text" class="hub-warning-body">{{ modWarning.text }}</div>
           <div class="hub-warning-meta">
-            Нарушений зафиксировано: {{ modWarning.level ?? 0 }} из 3.
-            До автоматической блокировки осталось этапов: <b>{{ modWarning.until_ban ?? 0 }}</b>.
+            {{ (modWarning.level ?? 0) }} / 3
+            <b>{{ modWarning.until_ban ?? 0 }}</b>
           </div>
         </div>
         <div class="hub-avatar-row">
@@ -582,17 +618,27 @@ async function confirmDeleteAccount() {
               class="visually-hidden"
               @change="onAvatarFile"
             />
-            Аватар
+            {{ i18nT('hub.avatar.button') }}
           </label>
         </div>
         <p v-if="avatarError" class="hub-avatar-err">{{ avatarError }}</p>
         <div style="display:grid; gap:8px; margin-top:8px;">
-          <div><b>Nickname</b>: {{ auth.username }}</div>
-          <div><b>Diamonds</b>: {{ diamonds }}</div>
-          <div><b>Online</b>: {{ presence.online_total }}</div>
+          <div><b>{{ i18nT('hub.nickname') }}</b>: {{ auth.username }}</div>
+          <div><b>{{ i18nT('hub.diamonds') }}</b>: {{ diamonds }}</div>
+          <div><b>{{ i18nT('hub.online') }}</b>: {{ presence.online_total }}</div>
+          <label style="display:grid; gap:4px; font-size:13px;">
+            <span><b>{{ i18nT('hub.language') }}</b></span>
+            <select :value="uiLang" class="hub-lang-select" @change="onLangChange">
+              <option value="en">English</option>
+              <option value="ru">Русский</option>
+              <option value="it">Italiano</option>
+              <option value="es">Español</option>
+              <option value="de">Deutsch</option>
+            </select>
+          </label>
         </div>
         <div v-if="presence.online_users.length" style="margin-top:10px; font-size: 13px; opacity: 0.95;">
-          <div style="margin-bottom:6px;"><b>Players online</b>:</div>
+          <div style="margin-bottom:6px;"><b>{{ i18nT('hub.playersOnline') }}</b>:</div>
           <div style="display:flex; flex-wrap: wrap; gap:6px;">
             <span v-for="u in presence.online_users" :key="u" style="padding:2px 8px; border-radius:999px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.10);">
               {{ u }}
@@ -607,18 +653,18 @@ async function confirmDeleteAccount() {
                 d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"
               />
             </svg>
-            <span>Мессенджер</span>
+            <span>{{ i18nT('hub.messenger') }}</span>
             <span v-if="messengerUnread > 0" class="hub-ms-badge">{{ messengerUnread }}</span>
           </button>
         </div>
         <div style="margin-top:12px; display:grid; gap:8px;">
-          <button class="btn" @click="logout">Logout</button>
-          <button type="button" class="btn btn-danger-ghost" @click="openDeleteModal">Удалить аккаунт</button>
+          <button class="btn" @click="logout">{{ i18nT('hub.logout') }}</button>
+          <button type="button" class="btn btn-danger-ghost" @click="openDeleteModal">{{ i18nT('hub.deleteAccount') }}</button>
         </div>
       </aside>
 
       <section style="flex: 1; border-radius: 14px; padding: 14px; background: rgba(10, 14, 28, 0.35); border: 1px solid rgba(255,255,255,0.12); position:relative;">
-        <h3 style="margin:0 0 10px 0;">Games</h3>
+        <h3 style="margin:0 0 10px 0;">{{ i18nT('hub.games') }}</h3>
         <TransitionGroup name="top-move" tag="div" class="hub-games-list">
           <div v-for="g in gamesForTop" :key="g.key" class="hub-game-card">
             <div class="hub-game-top">
@@ -637,37 +683,37 @@ async function confirmDeleteAccount() {
                     class="btn hub-like-btn hub-side-action"
                     :disabled="!!likes.my_vote && likes.my_vote !== g.key"
                     @click="likeGame(g.key)"
-                    :title="likes.my_vote ? 'Сегодня вы уже лайкнули другую игру' : 'Поставить лайк (1 раз в день, в счётчике — за всё время)'"
+                    :title="likes.my_vote ? i18nT('errors.generic') : i18nT('errors.generic')"
                   >
                     👍 {{ likes.counts[g.key] ?? 0 }}
                   </button>
                   <button
                     type="button"
                     class="btn hub-creator-toggle hub-side-action"
-                    :title="openCreatorKey === g.key ? 'Скрыть панель создателей' : 'Создатели игры — фото и текст от автора'"
+                    :title="openCreatorKey === g.key ? i18nT('hub.creator.toggleHide') : i18nT('hub.creator.toggleShow')"
                     @click="toggleCreatorPanel(g.key)"
                   >
-                    {{ openCreatorKey === g.key ? 'Скрыть' : 'Авторы' }}
+                    {{ openCreatorKey === g.key ? i18nT('hub.creator.toggleHide') : i18nT('hub.creator.toggleShow') }}
                   </button>
                 </div>
               </div>
               <div class="hub-game-right">
                 <div class="hub-game-title">
                   {{ catalog[g.key]?.title ?? g.title }}
-                  <span v-if="g.key === 'team_territory' && TEAM_TERRITORY_COMING_SOON" class="hub-game-wip-badge">В разработке</span>
-                  <span v-if="g.key === 'minecraft_2d_online' && MINECRAFT_2D_COMING_SOON" class="hub-game-wip-badge">В разработке</span>
+                  <span v-if="g.key === 'team_territory' && TEAM_TERRITORY_COMING_SOON" class="hub-game-wip-badge">{{ i18nT('hub.status.inDevelopment') }}</span>
+                  <span v-if="g.key === 'minecraft_2d_online' && MINECRAFT_2D_COMING_SOON" class="hub-game-wip-badge">{{ i18nT('hub.status.inDevelopment') }}</span>
                 </div>
                 <div class="hub-game-meta">
-                  <span style="opacity:0.85;">В сети: {{ hubOnlineCount(g.key) }}</span>
-                  <span v-if="g.key === 'misha_pro_racing_game'" style="opacity:0.75;">В игре: {{ fmtPlaytime(proRacingTime) }}</span>
-                  <span v-if="g.key === 'tamagochi_world_game'" style="opacity:0.75;">В игре: {{ fmtPlaytime(tamagochiTime) }}</span>
-                  <span v-if="g.key === 'team_territory'" style="opacity:0.75;">В игре: {{ fmtPlaytime(teamTerritoryTime) }}</span>
-                  <span v-if="g.key === 'minecraft_2d_online'" style="opacity:0.75;">В игре: {{ fmtPlaytime(mc2dTime) }}</span>
+                  <span style="opacity:0.85;">{{ i18nT('hub.online') }}: {{ hubOnlineCount(g.key) }}</span>
+                  <span v-if="g.key === 'misha_pro_racing_game'" style="opacity:0.75;">{{ fmtPlaytime(proRacingTime) }}</span>
+                  <span v-if="g.key === 'tamagochi_world_game'" style="opacity:0.75;">{{ fmtPlaytime(tamagochiTime) }}</span>
+                  <span v-if="g.key === 'team_territory'" style="opacity:0.75;">{{ fmtPlaytime(teamTerritoryTime) }}</span>
+                  <span v-if="g.key === 'minecraft_2d_online'" style="opacity:0.75;">{{ fmtPlaytime(mc2dTime) }}</span>
                 </div>
                 <div class="hub-game-desc">
-                  {{ catalog[g.key]?.description ?? '' }}
+                  {{ i18nT(String(catalog[g.key]?.description_code ?? '')) }}
                 </div>
-                <div v-if="likes.my_vote === g.key" class="hub-voted-badge">Ваш лайк сегодня</div>
+                <div v-if="likes.my_vote === g.key" class="hub-voted-badge">{{ i18nT('common.saved') }}</div>
               </div>
             </div>
             <div v-show="openCreatorKey === g.key" class="hub-creator-panel">
@@ -689,7 +735,7 @@ async function confirmDeleteAccount() {
                   <p v-else class="hub-creator-text hub-creator-text--muted">{{ CREATOR_EMPTY_MESSAGE }}</p>
                 </div>
               </div>
-              <button type="button" class="btn hub-creator-author-btn" @click="openIamAuthor(g.key)">Я автор</button>
+              <button type="button" class="btn hub-creator-author-btn" @click="openIamAuthor(g.key)">{{ i18nT('hub.creator.iAmAuthor') }}</button>
             </div>
           </div>
         </TransitionGroup>
@@ -715,30 +761,30 @@ async function confirmDeleteAccount() {
     <Teleport to="body">
       <div v-if="showDeleteModal" class="delete-modal-backdrop" @click.self="closeDeleteModal">
         <div class="delete-modal" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
-          <h2 id="delete-modal-title" class="delete-modal-title">Удаление аккаунта</h2>
+          <h2 id="delete-modal-title" class="delete-modal-title">{{ i18nT('hub.delete.title') }}</h2>
           <p class="delete-modal-text">
-            Это действие необратимо: профиль и данные на сервере пользователей будут удалены. Введите пароль для подтверждения.
+            {{ i18nT('hub.delete.text') }}
           </p>
           <label class="delete-modal-label">
-            <span>Логин</span>
+            <span>{{ i18nT('login.username') }}</span>
             <input type="text" class="delete-modal-input" :value="auth.username" readonly tabindex="-1" />
           </label>
           <label class="delete-modal-label">
-            <span>Пароль</span>
+            <span>{{ i18nT('login.password') }}</span>
             <input
               v-model="deletePassword"
               type="password"
               class="delete-modal-input"
               autocomplete="current-password"
-              placeholder="Введите пароль"
+              :placeholder="i18nT('login.password')"
               @keydown.enter="confirmDeleteAccount"
             />
           </label>
           <p v-if="deleteError" class="delete-modal-err">{{ deleteError }}</p>
           <div class="delete-modal-actions">
-            <button type="button" class="btn btn-modal-cancel" :disabled="deleteLoading" @click="closeDeleteModal">Отмена</button>
+            <button type="button" class="btn btn-modal-cancel" :disabled="deleteLoading" @click="closeDeleteModal">{{ i18nT('common.cancel') }}</button>
             <button type="button" class="btn btn-modal-delete" :disabled="deleteLoading || !deletePassword.trim()" @click="confirmDeleteAccount">
-              {{ deleteLoading ? 'Удаление…' : 'Удалить навсегда' }}
+              {{ deleteLoading ? i18nT('common.loading') : i18nT('hub.delete.confirm') }}
             </button>
           </div>
         </div>
@@ -748,23 +794,23 @@ async function confirmDeleteAccount() {
     <Teleport to="body">
       <div v-if="showAuthorModal" class="delete-modal-backdrop" @click.self="closeAuthorModal">
         <div class="delete-modal author-modal" role="dialog" aria-modal="true" aria-labelledby="author-modal-title">
-          <h2 id="author-modal-title" class="delete-modal-title">Блок «от автора»</h2>
+          <h2 id="author-modal-title" class="delete-modal-title">{{ i18nT('hub.creator.modalTitle') }}</h2>
           <p class="delete-modal-text">
-            Введите пароль из переменных окружения для этой игры. Фото при загрузке сжимается так же, как аватар аккаунта.
+            {{ i18nT('hub.creator.hint') }}
           </p>
           <label class="delete-modal-label">
-            <span>Пароль автора</span>
+            <span>{{ i18nT('hub.creator.password') }}</span>
             <input
               v-model="authorPassword"
               type="password"
               class="delete-modal-input"
               autocomplete="off"
-              placeholder="Секретный пароль автора игры"
+              :placeholder="i18nT('hub.creator.password')"
               @keydown.enter="submitAuthorBlock"
             />
           </label>
           <label class="delete-modal-label">
-            <span>Текст от автора</span>
+            <span>{{ i18nT('hub.creator.message') }}</span>
             <textarea
               v-model="authorMessage"
               class="delete-modal-input author-modal-textarea"
@@ -774,7 +820,7 @@ async function confirmDeleteAccount() {
             />
           </label>
           <label class="delete-modal-label">
-            <span>Фото (по желанию, до 5 МБ до сжатия)</span>
+            <span>{{ i18nT('hub.creator.photo') }}</span>
             <input
               ref="authorFileInputRef"
               type="file"
@@ -789,14 +835,14 @@ async function confirmDeleteAccount() {
             :disabled="authorSubmitting || !authorPassword.trim()"
             @click="resetAuthorBlock"
           >
-            {{ authorSubmitting ? '…' : 'Сбросить текст и фото' }}
+            {{ authorSubmitting ? '…' : i18nT('hub.creator.reset') }}
           </button>
           <div class="delete-modal-actions">
             <button type="button" class="btn btn-modal-cancel" :disabled="authorSubmitting" @click="closeAuthorModal">
-              Отмена
+              {{ i18nT('common.cancel') }}
             </button>
             <button type="button" class="btn" :disabled="authorSubmitting" @click="submitAuthorBlock">
-              {{ authorSubmitting ? 'Сохранение…' : 'Сохранить' }}
+              {{ authorSubmitting ? i18nT('common.loading') : i18nT('hub.creator.save') }}
             </button>
           </div>
         </div>
@@ -806,10 +852,10 @@ async function confirmDeleteAccount() {
     <Teleport to="body">
       <div v-if="showTeamTerritoryWipModal" class="delete-modal-backdrop" @click.self="closeTeamTerritoryWipModal">
         <div class="delete-modal" role="dialog" aria-modal="true" aria-labelledby="tt-wip-title">
-          <h2 id="tt-wip-title" class="delete-modal-title">Игра в разработке</h2>
-          <p class="delete-modal-text">Team Territory пока недоступна.</p>
+          <h2 id="tt-wip-title" class="delete-modal-title">{{ i18nT('common.loading') }}</h2>
+          <p class="delete-modal-text">Team Territory</p>
           <div class="delete-modal-actions">
-            <button type="button" class="btn btn-modal-cancel" @click="closeTeamTerritoryWipModal">Понятно</button>
+            <button type="button" class="btn btn-modal-cancel" @click="closeTeamTerritoryWipModal">{{ i18nT('common.ok') }}</button>
           </div>
         </div>
       </div>
@@ -818,10 +864,10 @@ async function confirmDeleteAccount() {
     <Teleport to="body">
       <div v-if="showMc2dWipModal" class="delete-modal-backdrop" @click.self="closeMc2dWipModal">
         <div class="delete-modal" role="dialog" aria-modal="true" aria-labelledby="mc2d-wip-title">
-          <h2 id="mc2d-wip-title" class="delete-modal-title">Игра в разработке</h2>
-          <p class="delete-modal-text">Minecraft 2D Online пока недоступна.</p>
+          <h2 id="mc2d-wip-title" class="delete-modal-title">{{ i18nT('common.loading') }}</h2>
+          <p class="delete-modal-text">Minecraft 2D Online</p>
           <div class="delete-modal-actions">
-            <button type="button" class="btn btn-modal-cancel" @click="closeMc2dWipModal">Понятно</button>
+            <button type="button" class="btn btn-modal-cancel" @click="closeMc2dWipModal">{{ i18nT('common.ok') }}</button>
           </div>
         </div>
       </div>
@@ -976,7 +1022,7 @@ async function confirmDeleteAccount() {
   display: grid;
   gap: 8px;
 }
-/* Фоны кнопок входа в игру: /assets/hub/*.png */
+/* Game entry button backgrounds: /assets/hub/*.png */
 .hub-game-open-btn {
   position: relative;
   overflow: hidden;
@@ -1142,6 +1188,14 @@ async function confirmDeleteAccount() {
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
   border: 1px solid rgba(255, 255, 255, 0.14);
   backdrop-filter: blur(10px);
+}
+.hub-lang-select {
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(0,0,0,0.25);
+  color: inherit;
+  padding: 0 8px;
 }
 .hub-toast--info {
   background: rgba(22, 36, 62, 0.92);

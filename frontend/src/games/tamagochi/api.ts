@@ -21,8 +21,32 @@ export async function tamagochiMe(token: string): Promise<{ pet: PetState | null
   return apiGet('/tamagochi/me', token)
 }
 
-export async function tamagochiAdopt(token: string, type: PetType): Promise<{ ok: boolean; pet: PetState }> {
-  return apiPost('/tamagochi/adopt', { type }, token)
+export async function tamagochiAdopt(
+  token: string,
+  type: PetType,
+  petName?: string,
+): Promise<{ ok: boolean; pet: PetState }> {
+  const body: Record<string, unknown> = { type }
+  if (petName?.trim()) body.pet_name = petName.trim().slice(0, 32)
+  return apiPost('/tamagochi/adopt', body, token)
+}
+
+export async function tamagochiStatus(token: string): Promise<{ needs_attention: boolean; reason: string | null }> {
+  return apiGet('/tamagochi/status', token)
+}
+
+export async function tamagochiHistory(token: string): Promise<{ history: unknown[] }> {
+  return apiGet('/tamagochi/history', token)
+}
+
+export async function tamagochiRecreate(
+  token: string,
+  type: PetType,
+  petName?: string,
+): Promise<{ ok: boolean; pet: PetState }> {
+  const body: Record<string, unknown> = { type }
+  if (petName?.trim()) body.pet_name = petName.trim().slice(0, 32)
+  return apiPost('/tamagochi/recreate', body, token)
 }
 
 export async function tamagochiAction(

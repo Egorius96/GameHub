@@ -15,6 +15,14 @@ from app.integrations.users_api import users_api
 from app.games.tamagochi_world.actions import ActionType, apply_action
 from app.games.tamagochi_world.world import tamagochi_world
 from app.games.tamagochi_world.shop import get_shop_prices, item_effects_doc
+from app.core.api_errors import api_error
+from app.games.tamagochi_world.pet_history import (
+    archive_pet,
+    ensure_death_archived,
+    estimate_best_diamond_interval_minutes,
+    pet_age_days,
+    pet_needs_attention,
+)
 from app.games.tamagochi_world.pet_state import (
     PetState,
     PetType,
@@ -38,6 +46,7 @@ HEAL_HP_POINTS = 10
 
 PLAY_ACTION_COINS_COST = 25
 SLEEP_ACTION_COINS_COST = 10
+RECREATE_PET_COINS_COST = 50
 
 
 def _migrate_inventory(progress: dict) -> dict:
@@ -71,7 +80,7 @@ def _get_session(authorization: str) -> tuple[str, dict]:
     token = authorization.replace("Bearer ", "")
     session = sessions.get(token)
     if session is None:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+        raise api_error(401, "unauthorized")
     other = ensure_gameshub_schema(session.user.get("other_data") or {})
     session.user["other_data"] = other
     games = other.setdefault("games", {})
@@ -79,11 +88,22 @@ def _get_session(authorization: str) -> tuple[str, dict]:
     if not isinstance(progress, dict):
         progress = {"playtime": 0}
         games[settings.tamagochi_game_key] = progress
+    progress.setdefault("pet_history", [])
     return token, progress
+
+
+def _save_progress(token: str, progress: dict, *, now: datetime) -> None:
+    username = sessions[token].username
+    pet = progress.get("pet_state")
+    neglect = progress.get("neglect") or {}
+    if isinstance(pet, dict):
+        ensure_death_archived(progress, pet, owner_username=username, neglect=neglect, now=now)
+    users_api.save_user(sessions[token].user)
 
 
 class AdoptRequest(BaseModel):
     type: PetType
+    pet_name: Optional[str] = Field(default=None, max_length=32)
 
 
 class ActionRequest(BaseModel):
@@ -127,7 +147,7 @@ def exchange(payload: ExchangeRequest, authorization: str = Header(default="")) 
 
     diamonds = int(other.get("diamonds", 0))
     if diamonds < payload.diamonds:
-        raise HTTPException(status_code=400, detail="Not enough diamonds")
+        raise api_error(400, "insufficient_diamonds", params={"required": payload.diamonds})
     other["diamonds"] = diamonds - int(payload.diamonds)
 
     coins = int(progress.get("coins", 0) or 0)
@@ -153,7 +173,7 @@ def buy(payload: BuyRequest, authorization: str = Header(default="")) -> dict:
 
     item = payload.item
     if item not in ("food", "toy"):
-        raise HTTPException(status_code=400, detail="Unknown item")
+        raise api_error(400, "unknown_item")
 
     # We price in diamonds but settle via internal coins by exchange; to keep it simple:
     # buy requires coins, cost is diamonds_price * rate coins per diamond.
@@ -164,12 +184,12 @@ def buy(payload: BuyRequest, authorization: str = Header(default="")) -> dict:
         cost_d = prices.toy_diamonds
     cost_coins = int(cost_d) * int(prices.diamonds_to_coins_rate) * int(payload.qty)
     if coins < cost_coins:
-        raise HTTPException(status_code=400, detail="Not enough coins")
+        raise api_error(400, "insufficient_coins", params={"required": cost_coins})
 
     inv = _migrate_inventory(progress)
     if item == "food":
         if payload.food_for is None:
-            raise HTTPException(status_code=400, detail="food_for required for food purchase")
+            raise api_error(400, "food_for_required")
         k = payload.food_for
         ft = inv.setdefault("food_by_type", {})
         if not isinstance(ft, dict):
@@ -195,7 +215,7 @@ def buy(payload: BuyRequest, authorization: str = Header(default="")) -> dict:
                     base = parsed
             except Exception:
                 pass
-        progress["toy_until"] = (base + timedelta(hours=24 * int(payload.qty))).isoformat()
+        progress["toy_until"] = (base + timedelta(hours=2 * int(payload.qty))).isoformat()
         # diamond boost: 10 minutes per toy, stacked (short buff)
         cur2 = progress.get("toy_diamond_until")
         base2 = now
@@ -208,7 +228,7 @@ def buy(payload: BuyRequest, authorization: str = Header(default="")) -> dict:
                     base2 = parsed2
             except Exception:
                 pass
-        progress["toy_diamond_until"] = (base2 + timedelta(minutes=10 * int(payload.qty))).isoformat()
+        progress["toy_diamond_until"] = (base2 + timedelta(minutes=20 * int(payload.qty))).isoformat()
 
     pet_st = progress.get("pet_state")
     if isinstance(pet_st, dict) and item == "toy":
@@ -237,31 +257,99 @@ def me(authorization: str = Header(default="")) -> dict:
         progress["pet_state"] = pet_state
         progress["neglect"] = neglect
         progress["last_update_at"] = pet_state.get("last_update_at")
-        users_api.save_user(sessions[token].user)
+        _save_progress(token, progress, now=now)
         return {"pet": pet_state, "neglect": neglect}
 
     # no pet or dead
     return {"pet": None, "neglect": neglect}
 
 
+@router.get("/status")
+def status(authorization: str = Header(default="")) -> dict:
+    """Lightweight hub reminder check."""
+    now = _now()
+    token, progress = _get_session(authorization)
+    pet = progress.get("pet_state")
+    neglect = progress.get("neglect") or {}
+    if isinstance(pet, dict) and pet.get("alive", True):
+        merge_shop_toy_buffs_from_progress(progress, pet)
+        res = sync_pet_state(pet, neglect, now=now, offline=True)
+        pet = res.pet
+        neglect = res.neglect
+        progress["pet_state"] = pet
+        progress["neglect"] = neglect
+        _save_progress(token, progress, now=now)
+    attn = pet_needs_attention(pet if isinstance(pet, dict) else None, now=now)
+    return attn
+
+
+@router.get("/history")
+def history(authorization: str = Header(default="")) -> dict:
+    _, progress = _get_session(authorization)
+    hist = progress.get("pet_history")
+    if not isinstance(hist, list):
+        hist = []
+    return {"history": list(reversed(hist[-50:]))}
+
+
+class RecreateRequest(BaseModel):
+    type: PetType
+    pet_name: Optional[str] = Field(default=None, max_length=32)
+
+
+@router.post("/recreate")
+def recreate(payload: RecreateRequest, authorization: str = Header(default="")) -> dict:
+    now = _now()
+    token, progress = _get_session(authorization)
+    username = sessions[token].username
+
+    coins_avail = int(progress.get("coins", 0) or 0)
+    if coins_avail < RECREATE_PET_COINS_COST:
+        raise api_error(400, "insufficient_coins", params={"required": RECREATE_PET_COINS_COST})
+    progress["coins"] = coins_avail - RECREATE_PET_COINS_COST
+
+    pet = progress.get("pet_state")
+    neglect = progress.get("neglect") or {}
+    if isinstance(pet, dict) and pet.get("alive", True):
+        merge_shop_toy_buffs_from_progress(progress, pet)
+        res = sync_pet_state(pet, neglect, now=now, offline=True)
+        pet = res.pet
+        archive_pet(progress, pet, owner_username=username, reason="recreated", now=now, neglect=res.neglect)
+    pet_id = uuid4().hex
+    new_pet: PetState = make_new_pet(payload.type, now=now, pet_id=pet_id, pet_name=payload.pet_name)
+    progress["pet_state"] = new_pet
+    progress["pet"] = {"type": payload.type, "pet_id": pet_id}
+    progress["last_update_at"] = new_pet.get("last_update_at")
+    progress["neglect"] = {"strikes": 0, "critical_ignored_seconds": 0, "last_critical_seen_at": None, "visit": {}}
+    sessions[token].user["other_data"] = ensure_gameshub_schema(sessions[token].user.get("other_data") or {})
+    _save_progress(token, progress, now=now)
+    # If WS is already connected, the world keeps in-memory pet state for connected owners
+    # and won't refresh it from users_api. Force-refresh immediately so map/avatar updates.
+    tamagochi_world.connect_owner(username, new_pet, progress.get("neglect") if isinstance(progress, dict) else None, now=now)
+    return {"ok": True, "pet": new_pet}
+
+
 @router.post("/adopt")
 def adopt(payload: AdoptRequest, authorization: str = Header(default="")) -> dict:
     now = _now()
     token, progress = _get_session(authorization)
+    username = sessions[token].username
 
     pet = progress.get("pet_state")
     if isinstance(pet, dict) and pet.get("alive", True):
         return {"pet": pet, "ok": True}
 
     pet_id = uuid4().hex
-    new_pet: PetState = make_new_pet(payload.type, now=now, pet_id=pet_id)
+    new_pet: PetState = make_new_pet(payload.type, now=now, pet_id=pet_id, pet_name=payload.pet_name)
     progress["pet_state"] = new_pet
     progress["pet"] = {"type": payload.type, "pet_id": pet_id}
     progress["last_update_at"] = new_pet.get("last_update_at")
     progress["neglect"] = {"strikes": 0, "critical_ignored_seconds": 0, "last_critical_seen_at": None, "visit": {}}
 
     sessions[token].user["other_data"] = ensure_gameshub_schema(sessions[token].user.get("other_data") or {})
-    users_api.save_user(sessions[token].user)
+    _save_progress(token, progress, now=now)
+    # Same as recreate: if user is already in the WS world, update immediately.
+    tamagochi_world.connect_owner(username, new_pet, progress.get("neglect") if isinstance(progress, dict) else None, now=now)
     return {"ok": True, "pet": new_pet}
 
 
@@ -273,7 +361,7 @@ def action(payload: ActionRequest, authorization: str = Header(default="")) -> d
     pet = progress.get("pet_state")
     neglect = progress.get("neglect") or {}
     if not isinstance(pet, dict) or not pet.get("alive", True):
-        raise HTTPException(status_code=400, detail="No active pet")
+        raise api_error(400, "no_active_pet")
 
     pet_state: PetState = pet  # type: ignore[assignment]
     merge_shop_toy_buffs_from_progress(progress, pet_state)
@@ -287,7 +375,7 @@ def action(payload: ActionRequest, authorization: str = Header(default="")) -> d
         pt = str(pet_state.get("type") or "cat")
         ft = inv.get("food_by_type") or {}
         if int(ft.get(pt, 0) or 0) <= 0:
-            raise HTTPException(status_code=400, detail="Need food for your pet type (buy in shop)")
+            raise api_error(400, "need_food")
         ft[pt] = int(ft.get(pt, 0) or 0) - 1
         progress["inventory"] = inv
         pet_state.setdefault("buffs", {})
@@ -302,11 +390,11 @@ def action(payload: ActionRequest, authorization: str = Header(default="")) -> d
     if coin_cost:
         coins_avail = int(progress.get("coins", 0) or 0)
         if coins_avail < coin_cost:
-            raise HTTPException(status_code=400, detail="Not enough coins")
+            raise api_error(400, "insufficient_coins", params={"required": coin_cost})
 
     result = apply_action(pet_state, payload.type, payload.payload, now=now)
     if not result.ok:
-        raise HTTPException(status_code=400, detail=result.reason or "Action failed")
+        raise api_error(400, "action_failed", message=result.reason or "Action failed")
 
     tamagochi_world.interrupt_diamond_search_if_active(pet_state, sessions[token].username, now=now)
 
@@ -322,7 +410,7 @@ def action(payload: ActionRequest, authorization: str = Header(default="")) -> d
     progress["neglect"] = neglect
     progress["last_update_at"] = pet_state.get("last_update_at")
 
-    users_api.save_user(sessions[token].user)
+    _save_progress(token, progress, now=now)
     return {"ok": True, "pet": pet_state, "neglect": neglect}
 
 
@@ -335,7 +423,7 @@ def heal_coins(authorization: str = Header(default="")) -> dict:
     pet = progress.get("pet_state")
     neglect = progress.get("neglect") or {}
     if not isinstance(pet, dict) or not pet.get("alive", True):
-        raise HTTPException(status_code=400, detail="No active pet")
+        raise api_error(400, "no_active_pet")
 
     pet_state: PetState = pet  # type: ignore[assignment]
     res = sync_pet_state(pet_state, neglect, now=now, offline=True)
@@ -344,11 +432,11 @@ def heal_coins(authorization: str = Header(default="")) -> dict:
     stats = pet_state.setdefault("stats", {})
     hp = int(stats.get("hp", 100))
     if hp >= 100:
-        raise HTTPException(status_code=400, detail="Health is already full")
+        raise api_error(400, "health_full")
 
     coins = int(progress.get("coins", 0) or 0)
     if coins < HEAL_COINS_COST:
-        raise HTTPException(status_code=400, detail="Not enough coins")
+        raise api_error(400, "insufficient_coins", params={"required": HEAL_COINS_COST})
 
     stats["hp"] = min(100, hp + HEAL_HP_POINTS)
     pet_state["stats"] = stats
@@ -360,7 +448,7 @@ def heal_coins(authorization: str = Header(default="")) -> dict:
     neglect = register_useful_action(neglect, now=now)
     progress["neglect"] = neglect
 
-    users_api.save_user(sessions[token].user)
+    _save_progress(token, progress, now=now)
     other = ensure_gameshub_schema(sessions[token].user.get("other_data") or {})
     return {
         "ok": True,
@@ -394,6 +482,6 @@ def end_visit(payload: EndVisitRequest, authorization: str = Header(default=""))
         ended_at = ended_at.replace(tzinfo=timezone.utc)
     neglect = maybe_add_neglect_strike(pet_state, neglect, now=now, visit_ended_at=ended_at)
     progress["neglect"] = neglect
-    users_api.save_user(sessions[token].user)
+    _save_progress(token, progress, now=now)
     return {"ok": True, "neglect": neglect, "alive": bool(pet_state.get("alive", True))}
 

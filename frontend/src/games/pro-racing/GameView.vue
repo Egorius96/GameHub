@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../../stores/auth'
 import { useGameSocket } from './useGameSocket'
 import {
@@ -16,9 +17,20 @@ import { startPresencePing, stopPresencePing } from '../../telemetry/presence'
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const { t } = useI18n()
 const mode = String(route.params.mode || 'normal')
 const gameData = computed(() => ((auth.otherData as any).games ?? {})?.misha_pro_racing_game ?? {})
 const carLevel = computed(() => Number((gameData.value as any).car_level ?? 1))
+const superpowers = computed(() => ((gameData.value as any).superpowers ?? {}) as Record<string, boolean>)
+
+function ownsSuperpower(name: string): boolean {
+  return !!superpowers.value[name]
+}
+
+function tryAbility(name: string) {
+  if (!ownsSuperpower(name)) return
+  ability(name)
+}
 const sceneEl = ref<HTMLDivElement | null>(null)
 const diamondHudRef = ref<HTMLElement | null>(null)
 const SCENE_W = 1200
@@ -33,9 +45,9 @@ let secondsPulseTimer: number | null = null
 const displaySeconds = ref(0)
 
 const modeTitle = computed(() => {
-  if (mode === 'hard') return 'Сложный режим'
-  if (mode === 'pvp_local') return 'Два игрока'
-  return 'Обычный режим'
+  if (mode === 'hard') return t('proRacing.menu.hard')
+  if (mode === 'pvp_local') return t('proRacing.menu.twoPlayers')
+  return t('proRacing.menu.normal')
 })
 
 const carImageByLevel: Record<number, string> = {
@@ -102,10 +114,10 @@ const keyHandler = (e: KeyboardEvent) => {
     setKeyHeld(mapped.key, mapped.player, true)
   }
 
-  if (e.code === 'KeyE') ability('drugs')
-  if (e.code === 'KeyQ') ability('immue')
-  if (e.code === 'KeyR') ability('rockspeed')
-  if (e.code === 'KeyT') ability('hearty_rock')
+  if (e.code === 'KeyE') tryAbility('drugs')
+  if (e.code === 'KeyQ') tryAbility('immue')
+  if (e.code === 'KeyR') tryAbility('rockspeed')
+  if (e.code === 'KeyT') tryAbility('hearty_rock')
 }
 
 const keyUpHandler = (e: KeyboardEvent) => {
@@ -204,7 +216,7 @@ watch(
   { deep: true },
 )
 
-/** Как в pro_racing_v3.0.py: шаг 230px по X; скролл полосы привязан к speed_rock (60 км/ч при 10) */
+/** Like in pro_racing_v3.0.py: 230px X step; lane scroll tied to speed_rock (60 km/h at 10) */
 const LANE_CYCLE_PX = 230
 const LANE_SCROLL_BASE_PX_PER_SEC = 60
 
@@ -214,7 +226,7 @@ const displayKmh = computed(() =>
   Math.round(BASE_KMH * (rockSpeed.value / BASE_ROCK_SPEED))
 )
 
-/** Смещение полос: rAF вместо CSS-animation — иначе при каждом тике WS сбрасывается анимация */
+/** Lane offset: rAF instead of CSS animation (WS ticks reset CSS animation) */
 const laneOffsetPx = ref(0)
 let laneRafId = 0
 let laneLastTs = 0
@@ -315,12 +327,12 @@ function backToMenu() {
           <h1 class="pr-game-title">{{ modeTitle }}</h1>
         </div>
         <div class="pr-top-actions">
-          <button type="button" class="pr-btn pr-btn--ghost" @click="restartGame">Рестарт</button>
-          <button type="button" class="pr-btn" @click="backToMenu">В меню</button>
+          <button type="button" class="pr-btn pr-btn--ghost" @click="restartGame">{{ t('proRacing.game.restart') }}</button>
+          <button type="button" class="pr-btn" @click="backToMenu">{{ t('common.back') }}</button>
         </div>
         <div v-if="state" class="pr-game-hud">
           <span class="pr-game-hud-line">{{ hudLine }}</span>
-          <span ref="diamondHudRef" class="pr-game-hud-diamonds" title="Копилка алмазов">
+          <span ref="diamondHudRef" class="pr-game-hud-diamonds" :title="t('proRacing.menu.diamonds')">
             <img src="/assets/original/brilliant.png" alt="" width="22" height="14" />
             {{ (auth.otherData as any).diamonds ?? 0 }}
           </span>
@@ -339,20 +351,20 @@ function backToMenu() {
             }"
             :style="state ? { '--pr-kmh': displayKmh } : undefined"
             role="application"
-            aria-label="Игровое поле"
+            :aria-label="t('proRacing.game.fieldAria')"
           >
             <div v-if="!state" class="pr-connect-overlay">
               <p v-if="wsError" class="pr-connect-msg pr-connect-msg--error">{{ wsError }}</p>
-              <p v-else class="pr-connect-msg">Подключение к игре…</p>
+              <p v-else class="pr-connect-msg">{{ t('proRacing.game.connecting') }}</p>
               <button v-if="wsError" type="button" class="pr-btn pr-btn--primary" @click="reconnect">
-                Переподключить
+                {{ t('proRacing.game.reconnect') }}
               </button>
             </div>
 
             <template v-else>
             <div class="pr-scene-bg" aria-hidden="true" />
 
-            <!-- Разметка как в оригинале: горизонтальные белые полосы 150×25, шаг 230px, едут влево -->
+            <!-- Layout like original: white 150×25 dashes, 230px step, moving left -->
             <div class="pr-road" aria-hidden="true">
               <div class="pr-road-vignette" />
               <div class="pr-lane-strip">
@@ -366,14 +378,14 @@ function backToMenu() {
             <div class="pr-layer-ui">
               <div class="pr-run-hud" aria-live="polite">
                 <div class="pr-run-time" :class="{ 'pr-run-time--pulse': secondsPulse }">
-                  <span class="pr-run-time-label">Время</span>
+                  <span class="pr-run-time-label">{{ t('proRacing.game.time') }}</span>
                   <span class="pr-run-time-value" :key="'sec-' + displaySeconds">{{ displaySeconds }}</span>
-                  <span class="pr-run-time-unit">сек</span>
+                  <span class="pr-run-time-unit">{{ t('proRacing.game.secondsShort') }}</span>
                 </div>
                 <div class="pr-run-speed">
-                  <span class="pr-run-speed-label">Скорость</span>
+                  <span class="pr-run-speed-label">{{ t('proRacing.game.speed') }}</span>
                   <span class="pr-run-speed-value" :key="'kmh-' + displayKmh">{{ displayKmh }}</span>
-                  <span class="pr-run-speed-unit">км/ч</span>
+                  <span class="pr-run-speed-unit">{{ t('proRacing.game.kmh') }}</span>
                 </div>
               </div>
               <div class="pr-lives pr-lives--p1">
@@ -438,12 +450,16 @@ function backToMenu() {
 
             <div v-if="showGameOver" class="pr-overlay">
               <div class="pr-modal">
-                <h2 class="pr-modal-title">Игра окончена</h2>
-                <p class="pr-modal-text">Вы продержались <strong>{{ state.seconds }}</strong> с</p>
-                <p v-if="mode === 'pvp_local'" class="pr-modal-text">Победитель: <strong>{{ state.winner }}</strong></p>
+                <h2 class="pr-modal-title">{{ t('proRacing.game.gameOverTitle') }}</h2>
+                <p class="pr-modal-text">
+                  {{ t('proRacing.game.survived', { seconds: Number(state.seconds ?? 0) }) }}
+                </p>
+                <p v-if="mode === 'pvp_local'" class="pr-modal-text">
+                  {{ t('proRacing.game.winner', { winner: String(state.winner ?? '') }) }}
+                </p>
                 <div class="pr-modal-actions">
-                  <button type="button" class="pr-btn pr-btn--ghost" @click="backToMenu">В меню</button>
-                  <button type="button" class="pr-btn pr-btn--primary" @click="restartGame">Ещё раз</button>
+                  <button type="button" class="pr-btn pr-btn--ghost" @click="backToMenu">{{ t('proRacing.game.toMenu') }}</button>
+                  <button type="button" class="pr-btn pr-btn--primary" @click="restartGame">{{ t('proRacing.game.again') }}</button>
                 </div>
               </div>
             </div>
@@ -453,9 +469,9 @@ function backToMenu() {
 
         <div class="pr-game-chrome">
         <p class="pr-hint">
-          <template v-if="mode === 'pvp_local'">Игрок 1: <kbd>WASD</kbd> · Игрок 2: <kbd>стрелки</kbd></template>
-          <template v-else>Управление: <kbd>WASD</kbd> или кнопки ниже</template>
-          · Способности: <kbd>E</kbd> <kbd>Q</kbd> <kbd>R</kbd> <kbd>T</kbd>
+          <template v-if="mode === 'pvp_local'">{{ t('proRacing.game.controlsPvp') }} </template>
+          <template v-else>{{ t('proRacing.game.controls') }} </template>
+          · {{ t('proRacing.game.abilitiesHint') }} <kbd>E</kbd> <kbd>Q</kbd> <kbd>R</kbd> <kbd>T</kbd>
         </p>
 
         <div class="pr-pad">
@@ -508,15 +524,23 @@ function backToMenu() {
         </div>
 
         <div class="pr-abilities">
-          <button type="button" class="pr-ab" @click="ability('drugs')">Drugs <span class="pr-key">E</span></button>
-          <button type="button" class="pr-ab" @click="ability('immue')">Immue <span class="pr-key">Q</span></button>
-          <button type="button" class="pr-ab" @click="ability('rockspeed')">Rockspeed <span class="pr-key">R</span></button>
-          <button type="button" class="pr-ab" @click="ability('hearty_rock')">Hearty <span class="pr-key">T</span></button>
+          <button type="button" class="pr-ab" :disabled="!ownsSuperpower('drugs')" @click="tryAbility('drugs')">
+            {{ t('proRacing.abilities.drugs') }} <span class="pr-key">E</span>
+          </button>
+          <button type="button" class="pr-ab" :disabled="!ownsSuperpower('immue')" @click="tryAbility('immue')">
+            {{ t('proRacing.abilities.immue') }} <span class="pr-key">Q</span>
+          </button>
+          <button type="button" class="pr-ab" :disabled="!ownsSuperpower('rockspeed')" @click="tryAbility('rockspeed')">
+            {{ t('proRacing.abilities.rockspeed') }} <span class="pr-key">R</span>
+          </button>
+          <button type="button" class="pr-ab" :disabled="!ownsSuperpower('hearty_rock')" @click="tryAbility('hearty_rock')">
+            {{ t('proRacing.abilities.hearty') }} <span class="pr-key">T</span>
+          </button>
         </div>
 
         <div class="pr-footer-actions">
-          <button type="button" class="pr-btn pr-btn--ghost" @click="restartGame">Рестарт</button>
-          <button type="button" class="pr-btn" @click="backToMenu">В меню</button>
+          <button type="button" class="pr-btn pr-btn--ghost" @click="restartGame">{{ t('proRacing.game.restart') }}</button>
+          <button type="button" class="pr-btn" @click="backToMenu">{{ t('common.back') }}</button>
         </div>
         </div>
       </section>
@@ -686,7 +710,7 @@ function backToMenu() {
   background-size: cover;
   background-position: center;
 }
-/* Слой дороги: как в pro_racing_v3.0.py — белые горизонтальные сегменты 150×25, шаг 230px, движение влево */
+/* Road layer like pro_racing_v3.0.py: white 150×25 segments, 230px step, moving left */
 .pr-road {
   position: absolute;
   inset: 0;
@@ -703,7 +727,7 @@ function backToMenu() {
   position: absolute;
   left: 0;
   right: 0;
-  /* y=335, h=25 при высоте сцены 700px */
+  /* y=335, h=25 for 700px scene height */
   top: 47.857%;
   height: 3.571%;
   min-height: 20px;

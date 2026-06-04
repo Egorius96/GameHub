@@ -26,6 +26,8 @@ class PetStats(TypedDict):
 
 class PetState(TypedDict, total=False):
     pet_id: str
+    pet_name: str
+    created_at: str
     type: PetType
     alive: bool
     is_sleeping: bool
@@ -137,14 +139,22 @@ def is_critical(pet: PetState) -> bool:
     return hunger >= TUNING.hunger_crit or hp <= TUNING.hp_crit
 
 
-def make_new_pet(pet_type: PetType, *, now: datetime, pet_id: str) -> PetState:
+def make_new_pet(
+    pet_type: PetType,
+    *,
+    now: datetime,
+    pet_id: str,
+    pet_name: str | None = None,
+) -> PetState:
     # spawn stable-ish but not identical by type+id
     seed = _hash_u32(pet_id, pet_type)
     x = float(120 + (seed % int(TUNING.world_w - 240)))
     y = float(120 + ((seed // 97) % int(TUNING.world_h - 240)))
-    return {
+    name = str(pet_name or "").strip()[:32] or None
+    out: PetState = {
         "pet_id": pet_id,
         "type": pet_type,
+        "created_at": iso_utc(now),
         "alive": True,
         "is_sleeping": False,
         "pos": {"x": x, "y": y},
@@ -152,6 +162,9 @@ def make_new_pet(pet_type: PetType, *, now: datetime, pet_id: str) -> PetState:
         "stats": {"hp": 100, "hunger": 20, "sleepiness": 10, "mood": 70},
         "last_update_at": iso_utc(now),
     }
+    if name:
+        out["pet_name"] = name
+    return out
 
 
 @dataclass(slots=True)

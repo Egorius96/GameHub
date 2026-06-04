@@ -1,6 +1,8 @@
 import { onBeforeUnmount, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 export function useGameSocket(token: string, mode: string) {
+  const { t } = useI18n()
   const state = ref<Record<string, any> | null>(null)
   const connected = ref(false)
   const gameOver = ref(false)
@@ -12,7 +14,7 @@ export function useGameSocket(token: string, mode: string) {
 
   function connect() {
     if (!token?.trim()) {
-      wsError.value = 'Нет токена авторизации. Войдите в аккаунт снова.'
+      wsError.value = t('errors.unauthorized')
       return
     }
     wsError.value = null
@@ -29,7 +31,7 @@ export function useGameSocket(token: string, mode: string) {
       try {
         const msg = JSON.parse(e.data)
         if (msg.type === 'state.error') {
-          wsError.value = String(msg.message || 'Ошибка сервера')
+          wsError.value = String(msg.message || t('errors.generic'))
           return
         }
         if (msg.type === 'state.tick') {
@@ -38,18 +40,18 @@ export function useGameSocket(token: string, mode: string) {
           gameOver.value = !!msg.payload.game_over
         }
       } catch {
-        wsError.value = 'Некорректный ответ сервера'
+        wsError.value = t('errors.generic')
       }
     }
     ws.onerror = () => {
       if (!state.value) {
-        wsError.value = 'Не удалось подключиться к игре. Проверьте сеть и перезапустите страницу.'
+        wsError.value = t('common.networkError')
       }
     }
     ws.onclose = () => {
       connected.value = false
       if (!closedByUnmount && !intentionalClose && !state.value) {
-        wsError.value = wsError.value || 'Соединение закрыто. Войдите в аккаунт заново или обновите страницу.'
+        wsError.value = wsError.value || t('common.networkError')
       }
       intentionalClose = false
     }
