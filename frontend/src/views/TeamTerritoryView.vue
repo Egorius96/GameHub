@@ -344,7 +344,7 @@ const challengeDeadline = computed(() => {
   const mode = Number(challenge.value?.mode)
   const totalSec =
     mode === 3
-      ? Number(challenge.value?.round_seconds ?? cfg.value?.challenge_sequence_sec ?? 8)
+      ? Number(challenge.value?.round_seconds ?? cfg.value?.challenge_sequence_sec ?? 10)
       : mode === 1
         ? Number(challenge.value?.round_seconds ?? cfg.value?.challenge_math_sec ?? 7)
         : Number(challenge.value?.round_seconds ?? cfg.value?.challenge_riddle_sec ?? 5)

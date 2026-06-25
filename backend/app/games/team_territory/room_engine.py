@@ -698,8 +698,6 @@ def start_challenge_if_allowed(
     if pl.challenge is not None:
         return None, "already_active"
     p = room.params()
-    if pl.challenges_started_match >= p.challenge_max_per_match:
-        return None, "max_challenges"
     if pl.last_challenge_started_at:
         if now < pl.last_challenge_started_at + timedelta(seconds=p.challenge_cooldown_sec):
             return None, "cooldown"

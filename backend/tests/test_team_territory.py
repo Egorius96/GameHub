@@ -33,7 +33,7 @@ def p() -> TeamTerritoryParams:
         challenge_problems=5,
         challenge_riddle_sec=5,
         challenge_math_sec=7,
-        challenge_sequence_sec=8,
+        challenge_sequence_sec=10,
         challenge_cooldown_sec=120,
         challenge_max_paint_start=5,
         challenge_round_gap_sec=3,
