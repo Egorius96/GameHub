@@ -13,7 +13,7 @@ from app.games.team_territory.room_engine import PlayerSlot, TerritoryRoom, utcn
 def p() -> TeamTerritoryParams:
     return TeamTerritoryParams(
         paint_max=10,
-        tick_ms=6000,
+        tick_ms=4000,
         regen_sec=45,
         bundle=3,
         diamond_cost=2,

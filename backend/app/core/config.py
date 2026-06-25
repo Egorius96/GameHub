@@ -23,7 +23,7 @@ class Settings(BaseModel):
     )
     # Team Territory (п. 12 GAME_RULES)
     tt_paint_max: int = Field(default_factory=lambda: int(os.getenv("TT_PAINT_MAX", "10")))
-    tt_tick_ms: int = Field(default_factory=lambda: int(os.getenv("TT_TICK_MS", "6000")))
+    tt_tick_ms: int = Field(default_factory=lambda: int(os.getenv("TT_TICK_MS", "4000")))
     tt_regen_sec: int = Field(default_factory=lambda: int(os.getenv("TT_REGEN_SEC", "45")))
     tt_bundle: int = Field(default_factory=lambda: int(os.getenv("TT_BUNDLE", "3")))
     tt_diamond_cost: int = Field(default_factory=lambda: int(os.getenv("TT_DIAMOND_COST", "2")))

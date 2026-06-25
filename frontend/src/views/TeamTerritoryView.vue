@@ -233,7 +233,7 @@ const tickProgress = computed(() => {
 function syncTickCountdownAnchor(snap: Record<string, unknown>) {
   const phase = String(snap?.phase ?? '')
   const closesIn = snap?.tick_closes_in_ms
-  const tickMs = Number((snap?.config as Record<string, unknown>)?.tick_ms ?? 6000)
+  const tickMs = Number((snap?.config as Record<string, unknown>)?.tick_ms ?? 4000)
   if (phase !== 'playing' || typeof closesIn !== 'number' || !Number.isFinite(closesIn)) {
     tickCountdownAnchor.value = null
     return
@@ -1156,9 +1156,11 @@ onBeforeUnmount(() => {
           >
             <span class="tt-team-swatch" :style="{ background: ts.hex }" />
             <span class="tt-team-name">{{ ts.name }}</span>
-            <span class="tt-team-score">{{ ts.score }}</span>
-            <span v-if="ts.lineCombos > 0" class="tt-team-line-combo">+{{ ts.lineCombos * lineComboPoints }}</span>
-            <span v-if="ts.combos > 0" class="tt-team-combo">+{{ ts.combos }}</span>
+            <span class="tt-team-score-group">
+              <span class="tt-team-score">{{ ts.score }}</span>
+              <span v-if="ts.lineCombos > 0" class="tt-team-line-combo">+{{ ts.lineCombos * lineComboPoints }}</span>
+              <span v-if="ts.combos > 0" class="tt-team-combo">+{{ ts.combos }}</span>
+            </span>
           </div>
         </TransitionGroup>
 
@@ -1726,7 +1728,7 @@ onBeforeUnmount(() => {
 }
 .tt-team-row {
   display: grid;
-  grid-template-columns: auto 1fr auto auto;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
@@ -1751,6 +1753,14 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.tt-team-score-group {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .tt-team-score {
   font-size: 1.45rem;
