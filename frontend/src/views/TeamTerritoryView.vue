@@ -398,26 +398,41 @@ function triggerPaintBurst() {
   }, 900)
 }
 
-type LobbyPlayer = { username: string; team_id: number; ready: boolean }
+type LobbyPlayer = { username: string; team_id: number; ready: boolean; connected: boolean }
 
 const lobbyRoster = computed((): LobbyPlayer[] => {
   const out: LobbyPlayer[] = []
   const pmap = payload.value?.players ?? {}
   for (const [username, slot] of Object.entries(pmap) as [string, any][]) {
     if (slot?.role !== 'player') continue
+    if (!slot?.connected) continue
+    const teamId = Number(slot.team_id ?? -1)
+    if (teamId < 0) continue
     out.push({
       username,
-      team_id: Number(slot.team_id ?? 0),
+      team_id: teamId,
       ready: !!slot.ready,
+      connected: true,
     })
   }
   return out
 })
 
+const lobbyOnlineCount = computed(() =>
+  Number(payload.value?.lobby_connected_count ?? lobbyRoster.value.length),
+)
+const iAmInTeam = computed(() => {
+  const tid = Number(me.value?.team_id ?? -1)
+  return Number.isFinite(tid) && tid >= 0
+})
+
 const lobbyDisconnected = computed(
   () => phase.value === 'lobby' && !wsEverGotState.value && !error.value,
 )
-const myTeamId = computed(() => Number(me.value?.team_id ?? 0))
+const myTeamId = computed(() => {
+  const tid = Number(me.value?.team_id ?? -1)
+  return Number.isFinite(tid) && tid >= 0 ? tid : null
+})
 const iAmReady = computed(() => !!me.value?.ready)
 
 function teamLabel(tm: { key?: string; name?: string }): string {
@@ -625,13 +640,31 @@ function send(msg: Record<string, unknown>) {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg))
 }
 
-function pickTeam(teamId: number) {
+function joinTeam(teamId: number) {
   if (iAmReady.value) return
   playSfx('button')
-  send({ type: 'set_team', team_id: teamId })
+  send({ type: 'join_team', team_id: teamId })
+}
+
+function leaveTeam() {
+  if (iAmReady.value || !iAmInTeam.value) return
+  playSfx('button')
+  send({ type: 'leave_team' })
+}
+
+function leaveRoom() {
+  send({ type: 'leave_room' })
+}
+
+function pickTeam(teamId: number) {
+  joinTeam(teamId)
 }
 
 function toggleReady() {
+  if (!iAmInTeam.value) {
+    showToast(t('teamTerritory.toasts.noTeam'), true)
+    return
+  }
   if (!iAmReady.value && lobbyTeamImbalanced.value) {
     showToast(t('teamTerritory.toasts.teamsImbalanced'), true)
     return
@@ -771,6 +804,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   intentionalWsClose = true
+  leaveRoom()
   boardResizeObs?.disconnect()
   boardResizeObs = null
   window.removeEventListener('resize', onWindowResize)
@@ -787,7 +821,7 @@ onBeforeUnmount(() => {
 <template>
   <div v-if="TEAM_TERRITORY_COMING_SOON" class="tt-wip">
     <header class="tt-header">
-      <button type="button" class="btn tt-back" @click="router.push('/games')">← {{ t('teamTerritory.nav.hub') }}</button>
+      <button type="button" class="btn tt-back" @click="leaveRoom(); router.push('/games')">← {{ t('teamTerritory.nav.hub') }}</button>
       <h1 class="tt-title">Team Territory</h1>
     </header>
     <div class="tt-wip-card card">
@@ -798,7 +832,7 @@ onBeforeUnmount(() => {
   </div>
   <div v-else class="tt-root" :class="{ 'tt-root--match': phase === 'playing' || phase === 'finished' }">
     <header class="tt-header">
-      <button type="button" class="btn tt-back" @click="router.push('/games')">← {{ t('teamTerritory.nav.hub') }}</button>
+      <button type="button" class="btn tt-back" @click="leaveRoom(); router.push('/games')">← {{ t('teamTerritory.nav.hub') }}</button>
       <h1 class="tt-title">Team Territory</h1>
       <div class="tt-wallet">💎 {{ diamonds }}</div>
     </header>
@@ -819,7 +853,7 @@ onBeforeUnmount(() => {
       <div class="tt-lobby-head">
         <div>
           <h2 class="tt-lobby-title">{{ t('teamTerritory.lobby.title') }}</h2>
-          <p class="tt-lobby-sub">{{ t('teamTerritory.lobby.playersCount', { n: lobbyReadyStats.players }) }}</p>
+          <p class="tt-lobby-sub">{{ t('teamTerritory.lobby.playersCount', { n: lobbyOnlineCount }) }}</p>
         </div>
         <div class="tt-lobby-head-actions">
           <button type="button" class="btn btn-guide-tiny" @click="openGuide">{{ t('teamTerritory.guide') }}</button>
@@ -835,23 +869,44 @@ onBeforeUnmount(() => {
 
       <p v-if="lobbyDisconnected" class="tt-lobby-warn">{{ t('teamTerritory.lobby.connecting') }}</p>
 
+      <p v-if="!iAmInTeam" class="tt-lobby-hint tt-lobby-hint--warn">{{ t('teamTerritory.lobby.noTeamYet') }}</p>
+
       <div class="tt-lobby-section">
         <h3 class="tt-lobby-section-title">{{ t('teamTerritory.lobby.pickTeam') }}</h3>
         <div class="tt-team-picker">
-          <button
+          <div
             v-for="tm in teamsWithPlayers"
             :key="tm.id"
-            type="button"
             class="tt-team-pick"
-            :class="{ 'tt-team-pick--active': myTeamId === tm.id, 'tt-team-pick--locked': iAmReady }"
-            :disabled="iAmReady"
-            @click="pickTeam(tm.id)"
+            :class="{
+              'tt-team-pick--active': myTeamId === tm.id,
+              'tt-team-pick--locked': iAmReady,
+            }"
           >
             <span class="tt-team-pick-swatch" :style="{ background: tm.hex }" />
             <span class="tt-team-pick-name">{{ tm.name }}</span>
             <span class="tt-team-pick-meta">{{ t('teamTerritory.lobby.teamPlayers', { count: tm.count }) }}</span>
-          </button>
+            <button
+              v-if="myTeamId !== tm.id"
+              type="button"
+              class="btn btn-sm tt-team-join-btn"
+              :disabled="iAmReady"
+              @click="joinTeam(tm.id)"
+            >
+              {{ t('teamTerritory.lobby.joinTeam') }}
+            </button>
+            <span v-else class="tt-team-you-badge">{{ t('teamTerritory.lobby.yourTeam') }}</span>
+          </div>
         </div>
+        <button
+          v-if="iAmInTeam"
+          type="button"
+          class="btn btn-sm tt-leave-team-btn"
+          :disabled="iAmReady"
+          @click="leaveTeam"
+        >
+          {{ t('teamTerritory.lobby.leaveTeam') }}
+        </button>
       </div>
 
       <div class="tt-lobby-roster">
@@ -902,9 +957,14 @@ onBeforeUnmount(() => {
         type="button"
         class="btn btn-primary tt-ready"
         :class="{ 'tt-ready--cancel': iAmReady }"
+        :disabled="!iAmInTeam"
         @click="toggleReady"
       >
         {{ iAmReady ? t('teamTerritory.lobby.cancelReady') : t('teamTerritory.lobby.ready') }}
+      </button>
+
+      <button type="button" class="btn tt-leave-room-btn" @click="leaveRoom(); router.push('/games')">
+        {{ t('teamTerritory.lobby.leaveRoom') }}
       </button>
 
       <button
@@ -2053,13 +2113,30 @@ onBeforeUnmount(() => {
   border: 2px solid rgba(255, 255, 255, 0.12);
   background: rgba(20, 28, 50, 0.75);
   color: inherit;
-  cursor: pointer;
-  transition: border-color 0.15s, transform 0.12s, box-shadow 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s;
   text-align: left;
 }
+.tt-team-join-btn {
+  margin-top: 2px;
+}
+.tt-team-you-badge {
+  margin-top: 2px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #a5d6a7;
+}
+.tt-leave-team-btn {
+  margin-top: 10px;
+}
+.tt-leave-room-btn {
+  margin-left: 8px;
+}
+.tt-lobby-hint--warn {
+  color: #ffcc80;
+  font-weight: 500;
+}
 .tt-team-pick:hover:not(:disabled) {
-  border-color: rgba(255, 255, 255, 0.28);
-  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.22);
 }
 .tt-team-pick--active {
   border-color: rgba(255, 255, 255, 0.55);

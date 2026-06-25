@@ -14,11 +14,13 @@ from app.core.config import settings
 from app.games.team_territory.challenge import load_spelling_words, normalize_spelling_locale
 from app.games.team_territory.debug import try_debug_row1_cheat_finish
 from app.games.team_territory.room_engine import (
+    TEAM_UNASSIGNED,
     TerritoryRoom,
     add_player,
     claim_paint_cost,
     handle_challenge_answer,
     opponent_ink_snapshot,
+    remove_lobby_player,
     start_challenge_if_allowed,
     utcnow,
 )
@@ -67,14 +69,20 @@ class TeamTerritoryManager:
             self.connections.setdefault(room_id, {})[username] = ws
             return room
 
-    async def unregister_ws(self, room_id: str, username: str) -> None:
+    async def unregister_ws(self, room_id: str, username: str) -> bool:
+        """Отключение WS. В лобби — удаляем игрока из комнаты. Возвращает True, если состав изменился."""
         async with self.lock:
             con = self.connections.get(room_id)
             if con and con.get(username) is not None:
                 del con[username]
             room = self.rooms.get(room_id)
-            if room and username in room.players:
+            if not room:
+                return False
+            if room.phase == "lobby":
+                return remove_lobby_player(room, username)
+            if username in room.players:
                 room.players[username].connected = False
+            return False
 
     async def broadcast_room(self, room_id: str) -> None:
         async with self.lock:
@@ -133,6 +141,8 @@ class TeamTerritoryManager:
                 pl = room.players.get(username)
                 if pl and pl.role == "player" and room.phase == "lobby":
                     want_ready = bool(data.get("ready"))
+                    if want_ready and pl.team_id < 0:
+                        return {"error": "no_team"}
                     if want_ready and room.lobby_teams_imbalanced():
                         return {"error": "teams_imbalanced"}
                     pl.ready = want_ready
@@ -140,7 +150,7 @@ class TeamTerritoryManager:
                         room.start_match(now)
                 return None
 
-            if t == "set_team":
+            if t in ("set_team", "join_team"):
                 pl = room.players.get(username)
                 if not pl or pl.role != "player" or room.phase != "lobby":
                     return {"error": "not_lobby"}
@@ -149,6 +159,19 @@ class TeamTerritoryManager:
                     return {"error": "bad_team"}
                 pl.team_id = tid
                 pl.ready = False
+                return None
+
+            if t == "leave_team":
+                pl = room.players.get(username)
+                if not pl or pl.role != "player" or room.phase != "lobby":
+                    return {"error": "not_lobby"}
+                pl.team_id = TEAM_UNASSIGNED
+                pl.ready = False
+                return None
+
+            if t == "leave_room":
+                if room.phase == "lobby":
+                    remove_lobby_player(room, username)
                 return None
 
             if t == "claim":

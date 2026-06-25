@@ -113,6 +113,32 @@ def test_debug_solo_flag_allows_single_ready(monkeypatch: pytest.MonkeyPatch) ->
     assert solo.match_team_sizes.get(1, 0) >= 1
 
 
+def test_lobby_roster_excludes_unassigned_and_disconnected() -> None:
+    from app.games.team_territory.room_engine import TEAM_UNASSIGNED, add_player, remove_lobby_player
+
+    room = TerritoryRoom(room_id="t", num_teams=4)
+    now = utcnow()
+    add_player(room, "online", role="player", now=now)
+    room.players["online"].team_id = 1
+    add_player(room, "ghost", role="player", now=now)
+    room.players["ghost"].team_id = 2
+    room.players["ghost"].connected = False
+    add_player(room, "idle", role="player", now=now)
+    assert room.players["idle"].team_id == TEAM_UNASSIGNED
+    assert len(room.lobby_roster_players()) == 1
+    assert room.lobby_roster_players()[0].username == "online"
+    assert remove_lobby_player(room, "online") is True
+    assert "online" not in room.players
+
+
+def test_add_player_starts_unassigned_in_lobby() -> None:
+    from app.games.team_territory.room_engine import TEAM_UNASSIGNED, add_player
+
+    room = TerritoryRoom(room_id="t", num_teams=4)
+    pl = add_player(room, "u", role="player", now=utcnow())
+    assert pl.team_id == TEAM_UNASSIGNED
+
+
 def test_debug_row1_cheat_finishes_with_win(monkeypatch: pytest.MonkeyPatch, p: TeamTerritoryParams) -> None:
     from app.core import config
     from app.games.team_territory.debug import try_debug_row1_cheat_finish

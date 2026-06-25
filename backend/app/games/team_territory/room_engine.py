@@ -18,6 +18,8 @@ from app.games.team_territory.grid import cap_c_for_tick, cell_total, grid_size_
 from app.games.team_territory.rewards import player_match_reward_diamonds, player_match_reward_kind, match_rewards_block_reason
 from app.games.team_territory.teams import teams_public_meta
 
+TEAM_UNASSIGNED = -1
+
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -60,6 +62,9 @@ class PlayerSlot:
 
     def is_active_player(self) -> bool:
         return self.role == "player" and self.connected
+
+    def in_lobby_team(self) -> bool:
+        return self.role == "player" and self.connected and self.team_id >= 0
 
 
 @dataclass
@@ -108,10 +113,17 @@ class TerritoryRoom:
 
     def lobby_team_player_counts(self) -> dict[int, int]:
         counts = {i: 0 for i in range(self.num_teams)}
-        for pl in self.active_players():
+        for pl in self.lobby_roster_players():
             if 0 <= pl.team_id < self.num_teams:
                 counts[pl.team_id] += 1
         return counts
+
+    def lobby_roster_players(self) -> list[PlayerSlot]:
+        """Игроки в лобби с явно выбранной командой и активным WS."""
+        return [p for p in self.players.values() if p.in_lobby_team()]
+
+    def lobby_connected_count(self) -> int:
+        return sum(1 for p in self.active_players() if p.connected)
 
     def lobby_teams_imbalanced(self, *, max_diff: int = 2) -> bool:
         counts = list(self.lobby_team_player_counts().values())
@@ -123,10 +135,10 @@ class TerritoryRoom:
         return [p for p in self.players.values() if p.role == "player"]
 
     def ready_players(self) -> list[PlayerSlot]:
-        return [p for p in self.active_players() if p.ready]
+        return [p for p in self.lobby_roster_players() if p.ready]
 
     def teams_represented(self, plist: list[PlayerSlot]) -> set[int]:
-        return {p.team_id for p in plist}
+        return {p.team_id for p in plist if p.team_id >= 0}
 
     def connected_teams_online(self) -> set[int]:
         out: set[int] = set()
@@ -171,18 +183,19 @@ class TerritoryRoom:
         if len(ready) < 1:
             return False
         p = self.params()
+        roster = self.lobby_roster_players()
         min_players = 1 if team_territory_debug_solo_active() else max(2, p.min_participants)
-        if len(self.active_players()) < min_players:
+        if len(roster) < min_players:
             return False
         if not self._ready_meets_min_start(ready):
             return False
         if not team_territory_debug_solo_active() and self.lobby_teams_imbalanced():
             return False
-        return all(pl.ready for pl in self.active_players())
+        return all(pl.ready for pl in roster)
 
     def start_match(self, now: datetime) -> None:
         p = self.params()
-        participants = [x for x in self.active_players() if x.ready]
+        participants = [x for x in self.lobby_roster_players() if x.ready]
         if not self._ready_meets_min_start(participants):
             return
         self.match_id = str(uuid.uuid4())
@@ -569,6 +582,8 @@ class TerritoryRoom:
             "balance_bonus": {str(k): v for k, v in sorted(self.balance_bonus.items())},
             "match_team_sizes": {str(k): v for k, v in sorted(self.match_team_sizes.items())},
             "lobby_teams_imbalanced": self.lobby_teams_imbalanced() if self.phase == "lobby" else False,
+            "lobby_connected_count": self.lobby_connected_count() if self.phase == "lobby" else 0,
+            "lobby_in_team_count": len(self.lobby_roster_players()) if self.phase == "lobby" else 0,
             "final_scores": {str(k): v for k, v in sorted(self.final_scores.items())},
             "combo_cells": sorted(self.combo_cells),
             "combo_center_cells": sorted(self.combo_center_cells),
@@ -673,6 +688,13 @@ def default_team_id(room: TerritoryRoom) -> int:
     return min(counts.keys(), key=lambda tid: (counts[tid], tid))
 
 
+def remove_lobby_player(room: TerritoryRoom, username: str) -> bool:
+    """Убрать игрока из лобби (отключение / явный выход)."""
+    if room.phase != "lobby":
+        return False
+    return room.players.pop(username, None) is not None
+
+
 def add_player(
     room: TerritoryRoom,
     username: str,
@@ -683,9 +705,11 @@ def add_player(
     if username in room.players:
         pl = room.players[username]
         pl.connected = True
+        if room.phase == "lobby" and pl.role == "player":
+            pl.ready = False
         return pl
     room.join_seq += 1
-    tid = default_team_id(room)
+    tid = TEAM_UNASSIGNED if room.phase == "lobby" and role == "player" else default_team_id(room)
     pl = PlayerSlot(username=username, team_id=tid, role=role, join_order=room.join_seq)
     room.players[username] = pl
     if room.phase == "lobby" and room.lobby_idle_since is None:
