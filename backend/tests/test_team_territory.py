@@ -292,11 +292,13 @@ def test_detect_horizontal_triple() -> None:
     completed: set[tuple[int, int, int]] = set()
     counts: dict[int, int] = {}
     combo_cells: set[int] = set()
+    combo_centers: set[int] = set()
     cells[2] = 0
-    n = register_new_combos(cells, g, [2], completed, counts, combo_cells)
+    n = register_new_combos(cells, g, [2], completed, counts, combo_cells, combo_centers)
     assert n == 1
     assert counts[0] == 1
     assert combo_cells == {0, 1, 2}
+    assert combo_centers == {1}
 
 
 def test_extend_line_after_combo_does_not_count_overlap() -> None:
@@ -327,10 +329,12 @@ def test_separate_combos_same_tick() -> None:
     completed: set[tuple[int, int, int]] = set()
     counts: dict[int, int] = {}
     combo_cells: set[int] = set()
-    n = register_new_combos(cells, g, [2, 12], completed, counts, combo_cells)
+    combo_centers: set[int] = set()
+    n = register_new_combos(cells, g, [2, 12], completed, counts, combo_cells, combo_centers)
     assert n == 2
     assert counts[0] == 2
     assert combo_cells == {0, 1, 2, 10, 11, 12}
+    assert combo_centers == {1, 11}
 
 
 def test_combo_cells_reject_claim(p: TeamTerritoryParams) -> None:
@@ -404,6 +408,7 @@ def test_match_reward_win_loss_tie_stale(p: TeamTerritoryParams) -> None:
     room.phase = "finished"
     room.finish_reason = "time_up"
     room.winning_team_ids = [0]
+    room.match_team_sizes = {0: 2, 1: 1}
 
     winner = PlayerSlot(username="w", team_id=0, role="player", ticks_in_match=5)
     loser = PlayerSlot(username="l", team_id=1, role="player", ticks_in_match=5)
@@ -440,9 +445,42 @@ def test_match_reward_win_loss_tie_stale(p: TeamTerritoryParams) -> None:
     room.winning_team_ids = [0]
     room.players.clear()
     room.players["solo"] = PlayerSlot(username="solo", team_id=0, role="player", ticks_in_match=10)
+    room.match_team_sizes = {0: 1}
     solo = room.players["solo"]
     assert player_match_reward_kind(room, solo, p) == "none"
     assert player_match_reward_diamonds(room, solo, p) == 0
+
+
+def test_winner_reward_when_opponent_has_no_ticks(p: TeamTerritoryParams) -> None:
+    from app.games.team_territory.rewards import player_match_reward_diamonds, player_match_reward_kind
+
+    room = TerritoryRoom(room_id="t", num_teams=2)
+    room.phase = "finished"
+    room.finish_reason = "time_up"
+    room.winning_team_ids = [0]
+    room.match_team_sizes = {0: 1, 1: 1}
+    room.players["w"] = PlayerSlot(username="w", team_id=0, role="player", ticks_in_match=5)
+    room.players["l"] = PlayerSlot(username="l", team_id=1, role="player", ticks_in_match=0)
+    assert player_match_reward_kind(room, room.players["w"], p) == "win"
+    assert player_match_reward_diamonds(room, room.players["w"], p) == 50
+    assert player_match_reward_kind(room, room.players["l"], p) == "none"
+    assert player_match_reward_diamonds(room, room.players["l"], p) == 0
+
+
+def test_rewards_allowed_with_debug_solo_flag(p: TeamTerritoryParams, monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.core import config
+    from app.games.team_territory.rewards import match_rewards_allowed, match_rewards_block_reason
+
+    monkeypatch.setattr(config.settings, "team_territory_debug_solo_lobby", True)
+    monkeypatch.setattr(config.settings, "gamehub_env", "development")
+    room = _room_with_players(["a", "b"], ready=[True, True])
+    room.players["a"].team_id = 0
+    room.players["b"].team_id = 1
+    room.start_match(utcnow())
+    room.phase = "finished"
+    room.finish_reason = "time_up"
+    assert match_rewards_allowed(room, p) is True
+    assert match_rewards_block_reason(room, p) is None
 
 
 def test_opponent_left_finishes_after_grace(p: TeamTerritoryParams) -> None:

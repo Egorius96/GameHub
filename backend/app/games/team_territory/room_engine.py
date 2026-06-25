@@ -14,7 +14,7 @@ from app.games.team_territory.challenge import ChallengeSession, load_spelling_w
 from app.games.team_territory.combos import register_new_combos
 from app.games.team_territory.constants import TeamTerritoryParams, tt_params
 from app.games.team_territory.grid import cap_c_for_tick, cell_total, grid_size_from_P
-from app.games.team_territory.rewards import player_match_reward_diamonds, player_match_reward_kind
+from app.games.team_territory.rewards import player_match_reward_diamonds, player_match_reward_kind, match_rewards_block_reason
 from app.games.team_territory.teams import teams_public_meta
 
 
@@ -90,6 +90,7 @@ class TerritoryRoom:
     match_team_sizes: dict[int, int] = field(default_factory=dict)
     completed_triples: set[tuple[int, int, int]] = field(default_factory=set)
     combo_cells: set[int] = field(default_factory=set)
+    combo_center_cells: set[int] = field(default_factory=set)
     ready_deadline_at: datetime | None = None
     lobby_idle_since: datetime | None = None
     invite_cooldown_until: datetime | None = None
@@ -202,6 +203,7 @@ class TerritoryRoom:
         self.match_team_sizes = {i: 0 for i in range(self.num_teams)}
         self.completed_triples = set()
         self.combo_cells = set()
+        self.combo_center_cells = set()
         self.insufficient_teams_online_since = None
         self.team_last_activity_at = {}
         for pl in self.players.values():
@@ -417,6 +419,7 @@ class TerritoryRoom:
                 self.completed_triples,
                 self.combo_counts,
                 self.combo_cells,
+                self.combo_center_cells,
             )
 
         self.tick_index += 1
@@ -475,6 +478,7 @@ class TerritoryRoom:
         self.match_team_sizes = {}
         self.completed_triples = set()
         self.combo_cells = set()
+        self.combo_center_cells = set()
         self.stall_phase = "none"
         self.stall_warn_deadline_at = None
         self.stall_hard_deadline_at = None
@@ -521,9 +525,14 @@ class TerritoryRoom:
 
         me_reward_kind = None
         me_reward_diamonds = None
+        me_rewards_block = None
         if self.phase == "finished" and me:
             me_reward_kind = player_match_reward_kind(self, me, p)
             me_reward_diamonds = player_match_reward_diamonds(self, me, p)
+            if me_reward_kind == "none":
+                me_rewards_block = match_rewards_block_reason(self, p)
+                if me_rewards_block is None and me.ticks_in_match < p.min_ticks_for_reward:
+                    me_rewards_block = "insufficient_ticks"
 
         tick_closes_in_ms = (
             max(0, int((self.next_tick_at - now).total_seconds() * 1000)) if self.next_tick_at else None
@@ -554,6 +563,7 @@ class TerritoryRoom:
             "lobby_teams_imbalanced": self.lobby_teams_imbalanced() if self.phase == "lobby" else False,
             "final_scores": {str(k): v for k, v in sorted(self.final_scores.items())},
             "combo_cells": sorted(self.combo_cells),
+            "combo_center_cells": sorted(self.combo_center_cells),
             "tick_claims": tick_claims_snapshot(self),
             "players": {
                 u: {
@@ -581,6 +591,7 @@ class TerritoryRoom:
                 "next_regen_at": me.next_regen_at.isoformat() if me and me.next_regen_at else None,
                 "match_reward_kind": me_reward_kind,
                 "match_reward_diamonds": me_reward_diamonds,
+                "match_rewards_block": me_rewards_block,
             },
             "opponent_ink": opp_ink,
             "stall": {"phase": self.stall_phase, "deadline_at": stall_deadline_iso},

@@ -317,6 +317,7 @@
       "rewardLoss": "Consolation prize: +{diamonds} 💎",
       "rewardTie": "Tie — +{diamonds} 💎 each",
       "noReward": "No diamond reward this match",
+      "noRewardTicks": "Need at least {min} ticks with a cell claim to earn rewards",
       "staleIdleTitle": "Match cancelled due to inactivity",
       "staleIdleNoReward": "Players were idle too long — no rewards. Play an active round next time.",
       "voidTitle": "Match cancelled",

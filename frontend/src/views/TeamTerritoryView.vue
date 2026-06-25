@@ -110,6 +110,12 @@ const teamScoresRanked = computed(() =>
   }),
 )
 
+const comboCenterCellSet = computed(() => {
+  const raw = payload.value?.combo_center_cells
+  if (!Array.isArray(raw)) return new Set<number>()
+  return new Set(raw.map((x: unknown) => Number(x)))
+})
+
 const comboCellSet = computed(() => {
   const raw = payload.value?.combo_cells
   if (!Array.isArray(raw)) return new Set<number>()
@@ -935,7 +941,7 @@ onBeforeUnmount(() => {
               @click="claimCell(i, Number(c))"
             >
               <span v-if="Number(c) >= 0" class="tt-cell-label">
-                {{ comboCellSet.has(i) ? '1+1' : '+1' }}
+                {{ comboCenterCellSet.has(i) ? '1+1' : '+1' }}
               </span>
             </button>
           </div>
@@ -1069,6 +1075,9 @@ onBeforeUnmount(() => {
             </p>
             <p v-else-if="myMatchReward.kind === 'tie'" class="tt-reward tt-reward--soft">
               {{ t('teamTerritory.finish.rewardTie', { diamonds: myMatchReward.diamonds }) }}
+            </p>
+            <p v-else-if="me.match_rewards_block === 'insufficient_ticks'" class="muted">
+              {{ t('teamTerritory.finish.noRewardTicks', { min: cfg.min_ticks_for_reward ?? 3 }) }}
             </p>
             <p v-else class="muted">{{ t('teamTerritory.finish.noReward') }}</p>
           </template>

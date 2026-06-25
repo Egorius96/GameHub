@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Literal
 
 from app.core.config import settings
@@ -15,9 +16,16 @@ if TYPE_CHECKING:
 
 from app.integrations.users_api import assign_user_other_data, sync_diamonds_to_sessions
 
+logger = logging.getLogger(__name__)
+
 MatchRewardKind = Literal["stale_idle", "none", "win", "loss", "tie"]
 
 NO_DIAMOND_FINISH_REASONS = frozenset({"stale_idle", "opponent_left", "one_sided_idle"})
+
+
+def teams_in_match(room: TerritoryRoom) -> set[int]:
+    """Команды, у которых был хотя бы один игрок в стартовом составе матча."""
+    return {t for t, n in room.match_team_sizes.items() if n > 0}
 
 
 def teams_with_reward_ticks(room: TerritoryRoom, p: TeamTerritoryParams | None = None) -> set[int]:
@@ -33,11 +41,22 @@ def teams_with_reward_ticks(room: TerritoryRoom, p: TeamTerritoryParams | None =
 
 
 def match_rewards_allowed(room: TerritoryRoom, p: TeamTerritoryParams | None = None) -> bool:
-    """Награды только если ≥2 команд реально участвовали в матче."""
+    """Награды разрешены, если матч честный (≥2 команд в составе, не void-finish)."""
     p = p or tt_params()
     if (room.finish_reason or "") in NO_DIAMOND_FINISH_REASONS:
         return False
-    return len(teams_with_reward_ticks(room, p)) >= 2
+    return len(teams_in_match(room)) >= 2
+
+
+def match_rewards_block_reason(room: TerritoryRoom, p: TeamTerritoryParams | None = None) -> str | None:
+    """Код причины отказа в наградах (для UI / логов)."""
+    p = p or tt_params()
+    reason = room.finish_reason or ""
+    if reason in NO_DIAMOND_FINISH_REASONS:
+        return reason
+    if len(teams_in_match(room)) < 2:
+        return "solo_match"
+    return None
 
 
 def player_match_reward_kind(
@@ -82,11 +101,15 @@ def grant_match_rewards(room: TerritoryRoom, memory_guard: set[str]) -> None:
     done_key = f"grant:{room.match_id}"
     if done_key in memory_guard:
         return
-    if settings.team_territory_debug_solo_lobby and settings.gamehub_env != "production":
-        memory_guard.add(done_key)
-        return
     p = tt_params()
-    if not match_rewards_allowed(room, p):
+    block = match_rewards_block_reason(room, p)
+    if block:
+        logger.info(
+            "team_territory match rewards skipped room=%s match_id=%s reason=%s",
+            room.room_id,
+            room.match_id,
+            block,
+        )
         memory_guard.add(done_key)
         return
 
@@ -128,7 +151,18 @@ def grant_match_rewards(room: TerritoryRoom, memory_guard: set[str]) -> None:
             db.commit()
             memory_guard.add(ukey)
             sync_diamonds_to_sessions(uname, int(other["diamonds"]))
+            logger.info(
+                "team_territory match reward granted user=%s match_id=%s amount=%d",
+                uname,
+                room.match_id,
+                amount,
+            )
     except Exception:
+        logger.exception(
+            "team_territory match rewards failed room=%s match_id=%s",
+            room.room_id,
+            room.match_id,
+        )
         db.rollback()
         memory_guard.discard(done_key)
     finally:

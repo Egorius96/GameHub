@@ -53,8 +53,10 @@ def register_new_combos(
     completed_triples: set[tuple[int, int, int]],
     combo_counts: dict[int, int],
     combo_cells: set[int],
+    combo_center_cells: set[int] | None = None,
 ) -> int:
     """Регистрирует новые тройки после закраски. Возвращает число новых комбо."""
+    centers = combo_center_cells if combo_center_cells is not None else set()
     new_count = 0
     for cell in painted_cells:
         for triple in triples_through_cell(cells, g, cell):
@@ -66,5 +68,17 @@ def register_new_combos(
             team = cells[triple[0]]
             combo_counts[team] = combo_counts.get(team, 0) + 1
             combo_cells.update(triple)
+            center = _center_of_triple(triple, g)
+            if center is not None:
+                centers.add(center)
             new_count += 1
     return new_count
+
+
+def _center_of_triple(triple: tuple[int, int, int], g: int) -> int | None:
+    """Средняя клетка тройки по линии (для метки 1+1)."""
+    if len(triple) != 3:
+        return None
+    rows = sorted(divmod(c, g)[0] for c in triple)
+    cols = sorted(divmod(c, g)[1] for c in triple)
+    return rows[1] * g + cols[1]
