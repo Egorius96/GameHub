@@ -1286,9 +1286,19 @@ onBeforeUnmount(() => {
             <span class="tt-team-swatch" :style="{ background: ts.hex }" />
             <span class="tt-team-name">{{ ts.name }}</span>
             <span class="tt-team-score-group">
-              <span class="tt-team-score">{{ ts.territory }}</span>
-              <span v-if="ts.linePts > 0" class="tt-team-line-combo">+{{ ts.linePts }}</span>
-              <span v-if="ts.comboPts > 0" class="tt-team-combo">+{{ ts.comboPts }}</span>
+              <span
+                class="tt-team-score"
+                :title="
+                  ts.linePts > 0 || ts.comboPts > 0
+                    ? `${ts.territory} + ${ts.linePts} + ${ts.comboPts}`
+                    : undefined
+                "
+              >{{ ts.totalScore }}</span>
+              <span v-if="ts.linePts > 0 || ts.comboPts > 0" class="tt-team-score-breakdown">
+                <span class="muted">{{ ts.territory }}</span>
+                <span v-if="ts.linePts > 0" class="tt-team-line-combo">+{{ ts.linePts }}</span>
+                <span v-if="ts.comboPts > 0" class="tt-team-combo">+{{ ts.comboPts }}</span>
+              </span>
             </span>
           </div>
         </TransitionGroup>
@@ -1452,7 +1462,6 @@ onBeforeUnmount(() => {
           <template v-else>
             <h3 class="tt-countdown-title">{{ t('teamTerritory.lobby.countdownTitle') }}</h3>
             <p class="tt-countdown-num" aria-live="polite">{{ countdownDisplaySec }}</p>
-            <p class="muted">{{ t('teamTerritory.lobby.countdownHint') }}</p>
           </template>
           <div class="tt-countdown-actions">
             <button
@@ -1960,11 +1969,22 @@ onBeforeUnmount(() => {
 }
 .tt-team-score-group {
   display: flex;
-  align-items: baseline;
-  gap: 4px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
   flex-wrap: nowrap;
   white-space: nowrap;
   flex-shrink: 0;
+}
+.tt-team-score-breakdown {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  font-size: 0.68rem;
+  line-height: 1;
+}
+.tt-team-score-breakdown .muted {
+  font-size: inherit;
 }
 .tt-team-score {
   font-size: 1.45rem;
