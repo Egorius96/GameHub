@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -9,6 +10,8 @@ from app.core.config import settings
 
 if TYPE_CHECKING:
     from app.games.team_territory.room_engine import PlayerSlot, TerritoryRoom
+
+logger = logging.getLogger(__name__)
 
 # Первый ряд сетки (индексы 0, 1, 2) — секретный триггер победы в debug.
 DEBUG_ROW1_CHEAT_CELLS = frozenset({0, 1, 2})
@@ -31,6 +34,12 @@ def ensure_debug_phantom_team_for_rewards(room: TerritoryRoom) -> None:
     for tid in range(room.num_teams):
         if tid != player_team:
             room.match_team_sizes[tid] = room.match_team_sizes.get(tid, 0) + 1
+            logger.info(
+                "team_territory_reward: debug phantom team added room=%s match_id=%s sizes=%s",
+                room.room_id,
+                room.match_id,
+                dict(room.match_team_sizes),
+            )
             return
 
 
@@ -46,6 +55,13 @@ def try_debug_row1_cheat_finish(room: TerritoryRoom, username: str, cell: int, n
 
     claims = room.debug_cheat_claims.setdefault(username, set())
     claims.add(cell)
+    logger.info(
+        "team_territory_reward: debug cheat claim room=%s user=%s cell=%s claims=%s",
+        room.room_id,
+        username,
+        cell,
+        sorted(claims),
+    )
     if claims != DEBUG_ROW1_CHEAT_CELLS:
         return False
 
@@ -61,4 +77,16 @@ def try_debug_row1_cheat_finish(room: TerritoryRoom, username: str, cell: int, n
     pl.claim_submitted = False
     ensure_debug_phantom_team_for_rewards(room)
     room._finish_match(now, "time_up")
+    logger.info(
+        "team_territory_reward: debug cheat finish room=%s match_id=%s user=%s team=%s "
+        "ticks=%s winners=%s finish_reason=%s match_team_sizes=%s",
+        room.room_id,
+        room.match_id,
+        username,
+        pl.team_id,
+        pl.ticks_in_match,
+        list(room.winning_team_ids),
+        room.finish_reason,
+        dict(room.match_team_sizes),
+    )
     return True

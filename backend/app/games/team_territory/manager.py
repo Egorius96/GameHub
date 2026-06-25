@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any
@@ -22,6 +23,8 @@ from app.games.team_territory.room_engine import (
     utcnow,
 )
 from app.games.team_territory.teams import team_count_bounds
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -106,6 +109,13 @@ class TeamTerritoryManager:
                     if room.phase == "finished":
                         from app.games.team_territory.rewards import grant_match_rewards
 
+                        logger.info(
+                            "team_territory_reward: tick_all calling grant room=%s match_id=%s "
+                            "finish_reason=%s",
+                            room.room_id,
+                            room.match_id,
+                            room.finish_reason,
+                        )
                         grant_match_rewards(room, self._reward_granted)
         for room_id in list(self.rooms.keys()):
             await self.broadcast_room(room_id)
@@ -155,6 +165,14 @@ class TeamTerritoryManager:
                         pl.claim_submitted = True
                         room.touch_activity(now, team_id=pl.team_id)
                         if try_debug_row1_cheat_finish(room, username, cell, now):
+                            logger.info(
+                                "team_territory_reward: debug cheat triggered via claim room=%s user=%s",
+                                room_id,
+                                username,
+                            )
+                            from app.games.team_territory.rewards import grant_match_rewards
+
+                            grant_match_rewards(room, self._reward_granted)
                             return {"debug_cheat_win": True}
                 return None
 
