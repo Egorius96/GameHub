@@ -78,6 +78,7 @@ const g = computed(() => Math.max(1, Number(payload.value?.g ?? 10)))
 const cells = computed(() => (Array.isArray(payload.value?.cells) ? payload.value.cells : []) as number[])
 const teams = computed(() => (Array.isArray(payload.value?.teams) ? payload.value.teams : []) as any[])
 const cfg = computed(() => payload.value?.config ?? {})
+const debugSoloLobby = computed(() => Boolean(cfg.value?.debug_solo_lobby))
 const challenge = computed(() => payload.value?.challenge ?? null)
 const stall = computed(() => payload.value?.stall ?? {})
 
@@ -465,6 +466,9 @@ const lobbyTeamImbalanced = computed(() => {
 })
 
 const lobbyCanStart = computed(() => {
+  if (debugSoloLobby.value) {
+    return lobbyReadyStats.value.ready >= 1 && lobbyReadyStats.value.players >= 1
+  }
   if (lobbyTeamImbalanced.value) return false
   return lobbyReadyStats.value.teamsReady >= 2
 })
@@ -802,6 +806,10 @@ onBeforeUnmount(() => {
     <div v-if="toastMsg" class="tt-toast" :class="{ 'tt-toast--err': toastErr }" role="status">{{ toastMsg }}</div>
     <div v-if="error" class="tt-err">{{ error }}</div>
 
+    <div v-if="debugSoloLobby" class="tt-debug">
+      {{ t('teamTerritory.lobby.debugSoloBanner') }} — {{ t('teamTerritory.lobby.debugCheatHint') }}
+    </div>
+
     <section v-if="isSpectator" class="tt-banner">
       {{ t('teamTerritory.spectator.banner') }}
       <span v-if="me.spectator_queue_position"> {{ t('teamTerritory.spectator.queue', { pos: me.spectator_queue_position }) }}</span>
@@ -821,7 +829,9 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <p class="tt-lobby-hint">{{ t('teamTerritory.lobby.startHint') }}</p>
+      <p class="tt-lobby-hint">
+        {{ debugSoloLobby ? t('teamTerritory.lobby.startHintSoloDebug') : t('teamTerritory.lobby.startHint') }}
+      </p>
 
       <p v-if="lobbyDisconnected" class="tt-lobby-warn">{{ t('teamTerritory.lobby.connecting') }}</p>
 

@@ -13,6 +13,7 @@ from app.core.config import settings
 from app.games.team_territory.challenge import ChallengeSession, load_spelling_words, pick_mode
 from app.games.team_territory.combos import register_new_combos
 from app.games.team_territory.constants import TeamTerritoryParams, tt_params
+from app.games.team_territory.debug import ensure_debug_phantom_team_for_rewards, team_territory_debug_solo_active
 from app.games.team_territory.grid import cap_c_for_tick, cell_total, grid_size_from_P
 from app.games.team_territory.rewards import player_match_reward_diamonds, player_match_reward_kind, match_rewards_block_reason
 from app.games.team_territory.teams import teams_public_meta
@@ -98,6 +99,7 @@ class TerritoryRoom:
     invite_broadcast_by: str | None = None
     insufficient_teams_online_since: datetime | None = None
     team_last_activity_at: dict[int, datetime] = field(default_factory=dict)
+    debug_cheat_claims: dict[str, set[int]] = field(default_factory=dict)
     join_seq: int = 0
     _rng: random.Random = field(default_factory=lambda: random.Random(secrets.randbits(128)))
 
@@ -158,6 +160,8 @@ class TerritoryRoom:
     def _ready_meets_min_start(self, ready: list[PlayerSlot]) -> bool:
         """Минимум 2 готовых игрока в 2 разных командах (п. 3 GAME_RULES)."""
         p = self.params()
+        if team_territory_debug_solo_active():
+            return len(ready) >= 1
         if len(ready) < max(2, p.min_participants):
             return False
         return len(self.teams_represented(ready)) >= 2
@@ -167,11 +171,12 @@ class TerritoryRoom:
         if len(ready) < 1:
             return False
         p = self.params()
-        if len(self.active_players()) < max(2, p.min_participants):
+        min_players = 1 if team_territory_debug_solo_active() else max(2, p.min_participants)
+        if len(self.active_players()) < min_players:
             return False
         if not self._ready_meets_min_start(ready):
             return False
-        if self.lobby_teams_imbalanced():
+        if not team_territory_debug_solo_active() and self.lobby_teams_imbalanced():
             return False
         return all(pl.ready for pl in self.active_players())
 
@@ -206,6 +211,7 @@ class TerritoryRoom:
         self.combo_center_cells = set()
         self.insufficient_teams_online_since = None
         self.team_last_activity_at = {}
+        self.debug_cheat_claims = {}
         for pl in self.players.values():
             pl.claim_cell = None
             if pl in participants:
@@ -223,6 +229,7 @@ class TerritoryRoom:
                 pl.ready = False
                 pl.paint = 0
                 pl.claim_cell = None
+        ensure_debug_phantom_team_for_rewards(self)
         self._update_stall_deadlines(now)
 
     def lobby_idle_expired(self, now: datetime) -> bool:
@@ -485,6 +492,7 @@ class TerritoryRoom:
         self.last_significant_activity_at = None
         self.insufficient_teams_online_since = None
         self.team_last_activity_at = {}
+        self.debug_cheat_claims = {}
         self.lobby_idle_since = now
         for u in list(self.spectator_queue_next):
             pl = self.players.get(u)
@@ -616,6 +624,7 @@ class TerritoryRoom:
                 "tie_diamonds": p.tie_diamonds,
                 "min_ticks_for_reward": p.min_ticks_for_reward,
                 "ready_timeout_sec": p.ready_timeout_sec,
+                "debug_solo_lobby": team_territory_debug_solo_active(),
             },
             "ready_deadline_at": self.ready_deadline_at.isoformat() if self.ready_deadline_at else None,
             "invite_cooldown_until": (

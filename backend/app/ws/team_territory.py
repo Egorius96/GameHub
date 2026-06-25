@@ -11,6 +11,7 @@ from app.core.security import decode_access_token
 from app.core.session import sessions
 from app.core.presence import presence
 from app.games.team_territory.constants import tt_params
+from app.games.team_territory.debug import try_debug_row1_cheat_finish
 from app.games.team_territory.manager import team_territory_manager
 from app.games.team_territory.room_engine import utcnow
 from app.integrations.users_api import users_api

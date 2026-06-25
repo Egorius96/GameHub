@@ -488,6 +488,17 @@ function openTransferModal() {
   showTransfer.value = true
 }
 
+function newIdempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    try {
+      return crypto.randomUUID()
+    } catch {
+      /* non-secure context (HTTP over LAN IP) */
+    }
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
 async function confirmTransfer() {
   const cid = activeChatId.value
   const toId = transferToId.value
@@ -497,23 +508,34 @@ async function confirmTransfer() {
     return
   }
   const amount = raw
-  if (!cid || !toId) return
-  playSfx('button')
-  const idempotencyKey = crypto.randomUUID()
-  const resp = await fetch('/api/messenger/transfer-diamonds', {
-    method: 'POST',
-    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: cid, to_user_id: toId, amount, idempotency_key: idempotencyKey }),
-  })
-  const data = (await resp.json().catch(() => ({}))) as { detail?: unknown; message?: MsgRow }
-  if (!resp.ok) {
-    showToast(mapApiError(data.detail, t), true)
+  if (!cid || !toId) {
+    showToast(t('messenger.errors.genericFailed'), true)
     return
   }
-  showTransfer.value = false
-  if (data.message && cid) appendMessageDedupe(cid, data.message)
-  await auth.refreshProfile()
-  void loadChats()
+  playSfx('button')
+  try {
+    const resp = await fetch('/api/messenger/transfer-diamonds', {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: cid,
+        to_user_id: toId,
+        amount,
+        idempotency_key: newIdempotencyKey(),
+      }),
+    })
+    const data = (await resp.json().catch(() => ({}))) as { detail?: unknown; message?: MsgRow }
+    if (!resp.ok) {
+      showToast(mapApiError(data.detail, t), true)
+      return
+    }
+    showTransfer.value = false
+    if (data.message && cid) appendMessageDedupe(cid, data.message)
+    await auth.refreshProfile()
+    void loadChats()
+  } catch {
+    showToast(t('messenger.errors.genericFailed'), true)
+  }
 }
 
 function connectWs() {

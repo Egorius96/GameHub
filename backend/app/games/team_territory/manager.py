@@ -11,6 +11,7 @@ from fastapi import WebSocket
 
 from app.core.config import settings
 from app.games.team_territory.challenge import load_spelling_words, normalize_spelling_locale
+from app.games.team_territory.debug import try_debug_row1_cheat_finish
 from app.games.team_territory.room_engine import (
     TerritoryRoom,
     add_player,
@@ -153,6 +154,8 @@ class TeamTerritoryManager:
                         pl.claim_cell = cell
                         pl.claim_submitted = True
                         room.touch_activity(now, team_id=pl.team_id)
+                        if try_debug_row1_cheat_finish(room, username, cell, now):
+                            return {"debug_cheat_win": True}
                 return None
 
             if t == "buy_paint":

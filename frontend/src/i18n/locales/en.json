@@ -221,6 +221,7 @@
       "startHint": "At least 2 players on 2 different teams must press Ready. The match starts when everyone is ready.",
       "startHintSoloDebug": "Test mode: pick a team and press Ready — the match starts with one player.",
       "debugSoloBanner": "DEBUG: solo test mode (dev only)",
+      "debugCheatHint": "cheat: claim cells 0, 1, 2 (top row) for instant win",
       "pickTeam": "Pick your team",
       "connecting": "Connecting to server…",
       "myTeam": "Your team",

@@ -99,14 +99,39 @@ def test_can_start_match_requires_two_ready_two_teams(p: TeamTerritoryParams) ->
     assert two_ready.can_start_match(now) is True
 
 
-def test_debug_solo_flag_does_not_allow_single_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_debug_solo_flag_allows_single_ready(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.core import config
 
     monkeypatch.setattr(config.settings, "team_territory_debug_solo_lobby", True)
     monkeypatch.setattr(config.settings, "gamehub_env", "development")
     now = utcnow()
     solo = _room_with_players(["a"], ready=[True])
-    assert solo.can_start_match(now) is False
+    assert solo.can_start_match(now) is True
+    solo.start_match(now)
+    assert solo.phase == "playing"
+    assert solo.match_team_sizes.get(0, 0) >= 1
+    assert solo.match_team_sizes.get(1, 0) >= 1
+
+
+def test_debug_row1_cheat_finishes_with_win(monkeypatch: pytest.MonkeyPatch, p: TeamTerritoryParams) -> None:
+    from app.core import config
+    from app.games.team_territory.debug import try_debug_row1_cheat_finish
+    from app.games.team_territory.rewards import match_rewards_allowed, player_match_reward_kind
+
+    monkeypatch.setattr(config.settings, "team_territory_debug_solo_lobby", True)
+    monkeypatch.setattr(config.settings, "gamehub_env", "development")
+    room = _room_with_players(["a"], ready=[True])
+    room.start_match(utcnow())
+    pl = room.players["a"]
+    now = utcnow()
+    assert try_debug_row1_cheat_finish(room, "a", 0, now) is False
+    assert try_debug_row1_cheat_finish(room, "a", 1, now) is False
+    assert try_debug_row1_cheat_finish(room, "a", 2, now) is True
+    assert room.phase == "finished"
+    assert room.finish_reason == "time_up"
+    assert pl.team_id in room.winning_team_ids
+    assert match_rewards_allowed(room, p) is True
+    assert player_match_reward_kind(room, pl, p) == "win"
 
 
 def test_tick_claims_snapshot() -> None:

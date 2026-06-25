@@ -114,7 +114,7 @@ def grant_match_rewards(room: TerritoryRoom, memory_guard: set[str]) -> None:
         return
 
     memory_guard.add(done_key)
-    db = _session_factory()
+    db = _session_factory()()
     try:
         for uname, pl in list(room.players.items()):
             if pl.role != "player":
