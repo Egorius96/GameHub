@@ -1,9 +1,11 @@
-"""Детекция комбинаций «три в ряд» на поле Team Territory."""
+"""Детекция комбинаций «три в ряд» и полных рядов/столбцов на поле Team Territory."""
 
 from __future__ import annotations
 
 # (dr, dc) — горизонталь, вертикаль, диагонали
 _DIRECTIONS = ((0, 1), (1, 0), (1, 1), (1, -1))
+
+LineKey = tuple[str, int]
 
 
 def _cell_index(row: int, col: int, g: int) -> int:
@@ -82,3 +84,62 @@ def _center_of_triple(triple: tuple[int, int, int], g: int) -> int | None:
     rows = sorted(divmod(c, g)[0] for c in triple)
     cols = sorted(divmod(c, g)[1] for c in triple)
     return rows[1] * g + cols[1]
+
+
+def _row_cells(row: int, g: int) -> list[int]:
+    return [row * g + col for col in range(g)]
+
+
+def _col_cells(col: int, g: int) -> list[int]:
+    return [row * g + col for row in range(g)]
+
+
+def _line_fully_owned(cells: list[int], indices: list[int]) -> int | None:
+    if not indices:
+        return None
+    team = cells[indices[0]]
+    if team < 0:
+        return None
+    for idx in indices:
+        if cells[idx] != team:
+            return None
+    return team
+
+
+def _lines_through_cell(row: int, col: int) -> list[LineKey]:
+    return [("row", row), ("col", col)]
+
+
+def register_new_line_combos(
+    cells: list[int],
+    g: int,
+    painted_cells: list[int],
+    completed_lines: set[LineKey],
+    line_combo_counts: dict[int, int],
+    line_combo_cells: set[int],
+    combo_cells: set[int],
+) -> int:
+    """Регистрирует полные ряды/столбцы после закраски. Возвращает число новых line-комбо."""
+    new_count = 0
+    checked_lines: set[LineKey] = set()
+    for cell in painted_cells:
+        if not (0 <= cell < len(cells)):
+            continue
+        row, col = divmod(cell, g)
+        for line_key in _lines_through_cell(row, col):
+            if line_key in checked_lines:
+                continue
+            checked_lines.add(line_key)
+            if line_key in completed_lines:
+                continue
+            kind, idx = line_key
+            indices = _row_cells(idx, g) if kind == "row" else _col_cells(idx, g)
+            team = _line_fully_owned(cells, indices)
+            if team is None:
+                continue
+            completed_lines.add(line_key)
+            line_combo_counts[team] = line_combo_counts.get(team, 0) + 1
+            line_combo_cells.update(indices)
+            combo_cells.update(indices)
+            new_count += 1
+    return new_count

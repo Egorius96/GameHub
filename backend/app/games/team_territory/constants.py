@@ -44,6 +44,7 @@ class TeamTerritoryParams:
     lobby_idle_close_sec: int
     lobby_countdown_sec: int
     combo_bonus_points: int
+    line_combo_bonus_points: int
     repaint_cost: int
     opponent_left_grace_sec: int
     one_sided_idle_sec: int
@@ -87,6 +88,7 @@ def tt_params() -> TeamTerritoryParams:
         lobby_idle_close_sec=int(s.tt_lobby_idle_close_sec),
         lobby_countdown_sec=int(s.tt_lobby_countdown_sec),
         combo_bonus_points=int(s.tt_combo_bonus_points),
+        line_combo_bonus_points=int(s.tt_line_combo_bonus_points),
         repaint_cost=int(s.tt_repaint_cost),
         opponent_left_grace_sec=max(5, int(s.tt_opponent_left_grace_sec)),
         one_sided_idle_sec=max(60, int(s.tt_one_sided_idle_sec)),

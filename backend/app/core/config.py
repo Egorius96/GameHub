@@ -45,6 +45,9 @@ class Settings(BaseModel):
     tt_challenge_math_sec: int = Field(default_factory=lambda: int(os.getenv("TT_CHALLENGE_MATH_SEC", "7")))
     tt_challenge_sequence_sec: int = Field(default_factory=lambda: int(os.getenv("TT_CHALLENGE_SEQUENCE_SEC", "10")))
     tt_combo_bonus_points: int = Field(default_factory=lambda: int(os.getenv("TT_COMBO_BONUS_POINTS", "1")))
+    tt_line_combo_bonus_points: int = Field(
+        default_factory=lambda: int(os.getenv("TT_LINE_COMBO_BONUS_POINTS", "3"))
+    )
     tt_repaint_cost: int = Field(default_factory=lambda: int(os.getenv("TT_REPAINT_COST", "2")))
     tt_opponent_left_grace_sec: int = Field(default_factory=lambda: int(os.getenv("TT_OPPONENT_LEFT_GRACE_SEC", "60")))
     tt_one_sided_idle_sec: int = Field(default_factory=lambda: int(os.getenv("TT_ONE_SIDED_IDLE_SEC", "300")))

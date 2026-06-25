@@ -47,6 +47,7 @@ def p() -> TeamTerritoryParams:
         lobby_idle_close_sec=600,
         lobby_countdown_sec=10,
         combo_bonus_points=1,
+        line_combo_bonus_points=3,
         repaint_cost=2,
         opponent_left_grace_sec=60,
         one_sided_idle_sec=300,
@@ -653,3 +654,94 @@ def test_reconnect_clears_opponent_left_timer(p: TeamTerritoryParams) -> None:
     room.players["b"].connected = True
     room._track_insufficient_teams_online(utcnow())
     assert room.insufficient_teams_online_since is None
+
+
+def test_line_not_counted_until_full() -> None:
+    from app.games.team_territory.combos import register_new_line_combos
+
+    g = 4
+    cells = [-1] * (g * g)
+    for col in range(3):
+        cells[col] = 0
+    completed_lines: set[tuple[str, int]] = set()
+    line_counts: dict[int, int] = {}
+    line_cells: set[int] = set()
+    combo_cells: set[int] = set()
+    n = register_new_line_combos(cells, g, [2], completed_lines, line_counts, line_cells, combo_cells)
+    assert n == 0
+    assert line_counts == {}
+    assert line_cells == set()
+
+
+def test_full_row_registered_once() -> None:
+    from app.games.team_territory.combos import register_new_line_combos
+
+    g = 4
+    cells = [-1] * (g * g)
+    for col in range(3):
+        cells[col] = 0
+    completed_lines: set[tuple[str, int]] = set()
+    line_counts: dict[int, int] = {}
+    line_cells: set[int] = set()
+    combo_cells: set[int] = set()
+    cells[3] = 0
+    n = register_new_line_combos(cells, g, [3], completed_lines, line_counts, line_cells, combo_cells)
+    assert n == 1
+    assert line_counts[0] == 1
+    assert line_cells == {0, 1, 2, 3}
+    assert combo_cells == {0, 1, 2, 3}
+    assert ("row", 0) in completed_lines
+    n2 = register_new_line_combos(cells, g, [3], completed_lines, line_counts, line_cells, combo_cells)
+    assert n2 == 0
+    assert line_counts[0] == 1
+
+
+def test_full_row_cells_not_repaintable(p: TeamTerritoryParams) -> None:
+    room = _room_with_players(["a", "b"], ready=[True, True])
+    room.start_match(utcnow())
+    room.line_combo_cells = {0, 1, 2, 3}
+    room.combo_cells = {0, 1, 2, 3}
+    room.cells[0] = 0
+    pl = room.players["a"]
+    pl.claim_cell = 0
+    pl.claim_submitted = True
+    pl.paint = 5
+    room.next_tick_at = utcnow() - timedelta(seconds=1)
+    room.process_tick(utcnow())
+    assert room.cells[0] == 0
+    assert pl.paint == 5
+
+
+def test_corner_completes_row_and_column() -> None:
+    from app.games.team_territory.combos import register_new_line_combos
+
+    g = 3
+    cells = [-1] * (g * g)
+    cells[1] = cells[2] = cells[3] = cells[6] = 0
+    completed_lines: set[tuple[str, int]] = set()
+    line_counts: dict[int, int] = {}
+    line_cells: set[int] = set()
+    combo_cells: set[int] = set()
+    cells[0] = 0
+    n = register_new_line_combos(cells, g, [0], completed_lines, line_counts, line_cells, combo_cells)
+    assert n == 2
+    assert line_counts[0] == 2
+    assert ("row", 0) in completed_lines
+    assert ("col", 0) in completed_lines
+
+
+def test_finish_includes_line_bonus(p: TeamTerritoryParams) -> None:
+    room = TerritoryRoom(room_id="t", num_teams=2)
+    room.phase = "playing"
+    room.g = 4
+    room.cells = [0, 0, 0, 0] + [-1] * 12
+    room.combo_counts = {0: 1, 1: 0}
+    room.line_combo_counts = {0: 1, 1: 0}
+    room.combo_cells = {0, 1, 2}
+    room.line_combo_cells = {0, 1, 2, 3}
+    room.match_team_sizes = {0: 2, 1: 1}
+    room._finish_match(utcnow(), "time_up")
+    assert room.scores[0] == 4
+    assert room.combo_bonus[0] == 1
+    assert room.line_combo_bonus[0] == 3
+    assert room.final_scores[0] == 8

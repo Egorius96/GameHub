@@ -332,6 +332,8 @@
       "title": "Match finished",
       "scores": "Team scores",
       "winners": "Winning teams",
+      "youWon": "Your team won!",
+      "youLost": "Your team lost",
       "backToLobby": "Back to lobby",
       "reward": "You earned +{diamonds} 💎",
       "rewardWin": "Victory! +{diamonds} 💎",

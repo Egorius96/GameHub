@@ -80,6 +80,7 @@ const teams = computed(() => (Array.isArray(payload.value?.teams) ? payload.valu
 const cfg = computed(() => payload.value?.config ?? {})
 const maxPlayersPerTeam = computed(() => Number(cfg.value?.max_players_per_team ?? 4))
 const maxPlayersInLobby = computed(() => Number(cfg.value?.max_players_in_lobby ?? 16))
+const lineComboPoints = computed(() => Number(cfg.value?.line_combo_bonus_points ?? 3))
 const debugSoloLobby = computed(() => Boolean(cfg.value?.debug_solo_lobby))
 const challenge = computed(() => payload.value?.challenge ?? null)
 const stall = computed(() => payload.value?.stall ?? {})
@@ -96,18 +97,21 @@ const teamScores = computed(() => {
     if (tid >= 0) counts[tid] = (counts[tid] ?? 0) + 1
   }
   const comboMap = payload.value?.combo_counts ?? {}
+  const lineComboMap = payload.value?.line_combo_counts ?? {}
   return teams.value.map((tm: any) => ({
     id: Number(tm.id),
     name: String(tm.name ?? `Team ${Number(tm.id) + 1}`),
     hex: String(tm.hex ?? '#666'),
     score: counts[Number(tm.id)] ?? 0,
     combos: Number(comboMap[String(tm.id)] ?? comboMap[Number(tm.id)] ?? 0),
+    lineCombos: Number(lineComboMap[String(tm.id)] ?? lineComboMap[Number(tm.id)] ?? 0),
   }))
 })
 
 const teamScoresRanked = computed(() =>
   [...teamScores.value].sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score
+    if (b.lineCombos !== a.lineCombos) return b.lineCombos - a.lineCombos
     if (b.combos !== a.combos) return b.combos - a.combos
     return a.id - b.id
   }),
@@ -124,6 +128,19 @@ const comboCellSet = computed(() => {
   if (!Array.isArray(raw)) return new Set<number>()
   return new Set(raw.map((x: unknown) => Number(x)))
 })
+
+const lineComboCellSet = computed(() => {
+  const raw = payload.value?.line_combo_cells
+  if (!Array.isArray(raw)) return new Set<number>()
+  return new Set(raw.map((x: unknown) => Number(x)))
+})
+
+function cellComboLabel(index: number): string | null {
+  if (lineComboCellSet.value.has(index)) return '+3'
+  if (comboCenterCellSet.value.has(index)) return '1+1'
+  if (comboCellSet.value.has(index)) return '+1'
+  return null
+}
 
 const tickClaims = computed((): Record<number, number[]> => {
   const raw = payload.value?.tick_claims ?? {}
@@ -166,18 +183,22 @@ function finishReasonLabel(reason: string | undefined): string {
 const scoreRows = computed(() => {
   const sc = payload.value?.scores ?? {}
   const comboBonus = payload.value?.combo_bonus ?? {}
+  const lineComboBonusMap = payload.value?.line_combo_bonus ?? {}
+  const lineComboCounts = payload.value?.line_combo_counts ?? {}
   const balanceBonus = payload.value?.balance_bonus ?? {}
   const finalSc = payload.value?.final_scores ?? {}
   const comboCounts = payload.value?.combo_counts ?? {}
   const finished = phase.value === 'finished'
-  return teams.value.map((tm: any) => {
+  const rows = teams.value.map((tm: any) => {
     const id = Number(tm.id)
     const territory = Number(sc[String(id)] ?? sc[id] ?? 0)
     const combos = Number(comboCounts[String(id)] ?? comboCounts[id] ?? 0)
+    const lineCombos = Number(lineComboCounts[String(id)] ?? lineComboCounts[id] ?? 0)
     const combo = Number(comboBonus[String(id)] ?? comboBonus[id] ?? 0)
+    const lineBonus = Number(lineComboBonusMap[String(id)] ?? lineComboBonusMap[id] ?? 0)
     const balance = Number(balanceBonus[String(id)] ?? balanceBonus[id] ?? 0)
     const total = finished
-      ? Number(finalSc[String(id)] ?? finalSc[id] ?? territory + combo + balance)
+      ? Number(finalSc[String(id)] ?? finalSc[id] ?? territory + combo + lineBonus + balance)
       : territory
     return {
       id,
@@ -185,11 +206,17 @@ const scoreRows = computed(() => {
       hex: String(tm.hex ?? '#666'),
       territory,
       combos,
+      lineCombos,
       comboBonus: combo,
+      lineBonus,
       balanceBonus: balance,
       score: total,
     }
   })
+  if (finished) {
+    return [...rows].sort((a, b) => b.score - a.score || a.id - b.id)
+  }
+  return rows
 })
 
 const opponentInkSum = computed(() => Number(payload.value?.opponent_ink?.sum ?? 0))
@@ -305,9 +332,14 @@ const isVoidMatchFinish = computed(() => {
   return r === 'stale_idle' || r === 'opponent_left' || r === 'one_sided_idle'
 })
 
-const isScoreTie = computed(() => {
+const myTeamMatchOutcome = computed((): 'win' | 'loss' | 'tie' | null => {
+  if (phase.value !== 'finished' || isVoidMatchFinish.value) return null
+  const tid = myTeamId.value
+  if (tid < 0) return null
   const wins = (payload.value?.winning_team_ids ?? []) as number[]
-  return wins.length > 1
+  if (wins.length > 1) return 'tie'
+  if (!wins.length) return 'tie'
+  return wins[0] === tid ? 'win' : 'loss'
 })
 
 const myMatchReward = computed(() => ({
@@ -598,7 +630,7 @@ function cellStyle(teamId: number, index: number) {
   if (teamId < 0) return { ...base, ...claimVars }
   const tm = teams.value.find((x: any) => Number(x?.id) === teamId)
   const hex = tm?.hex ? String(tm.hex) : '#888'
-  if (!comboCellSet.value.has(index)) return { ...base, ...claimVars }
+  if (!comboCellSet.value.has(index) && !lineComboCellSet.value.has(index)) return { ...base, ...claimVars }
   return {
     ...base,
     ...claimVars,
@@ -724,7 +756,7 @@ function toggleReady() {
 
 function canClaimCell(teamId: number, index: number): boolean {
   if (teamId < 0) return true
-  if (comboCellSet.value.has(index)) return false
+  if (comboCellSet.value.has(index) || lineComboCellSet.value.has(index)) return false
   if (teamId === myTeamId.value) return false
   return true
 }
@@ -1048,7 +1080,8 @@ onBeforeUnmount(() => {
               :class="{
                 pulse: !reducedMotion && c < 0 && !tickClaims[i]?.length,
                 'tt-cell--picked': selectedCell === i,
-                'tt-cell--combo': comboCellSet.has(i) && c >= 0,
+                'tt-cell--line-combo': lineComboCellSet.has(i) && c >= 0,
+                'tt-cell--combo': comboCellSet.has(i) && c >= 0 && !lineComboCellSet.has(i),
                 'tt-cell--claimed': (tickClaims[i]?.length ?? 0) > 0,
                 'tt-cell--multi-claim': (tickClaims[i]?.length ?? 0) > 1,
                 'tt-cell--repaintable': canClaimCell(Number(c), i),
@@ -1059,9 +1092,7 @@ onBeforeUnmount(() => {
               @mouseleave="hoverCell = null"
               @click="claimCell(i, Number(c))"
             >
-              <span v-if="Number(c) >= 0" class="tt-cell-label">
-                {{ comboCenterCellSet.has(i) ? '1+1' : '+1' }}
-              </span>
+              <span v-if="cellComboLabel(i)" class="tt-cell-label">{{ cellComboLabel(i) }}</span>
             </button>
           </div>
         </div>
@@ -1126,6 +1157,7 @@ onBeforeUnmount(() => {
             <span class="tt-team-swatch" :style="{ background: ts.hex }" />
             <span class="tt-team-name">{{ ts.name }}</span>
             <span class="tt-team-score">{{ ts.score }}</span>
+            <span v-if="ts.lineCombos > 0" class="tt-team-line-combo">+{{ ts.lineCombos * lineComboPoints }}</span>
             <span v-if="ts.combos > 0" class="tt-team-combo">+{{ ts.combos }}</span>
           </div>
         </TransitionGroup>
@@ -1169,6 +1201,7 @@ onBeforeUnmount(() => {
                 <span class="tt-finish-total">{{ row.score }}</span>
                 <span class="muted tt-finish-breakdown">
                   {{ row.territory }}
+                  <template v-if="row.lineBonus > 0"> +{{ row.lineBonus }}</template>
                   <template v-if="row.comboBonus > 0"> +{{ row.comboBonus }}</template>
                   <template v-if="row.balanceBonus > 0"> +{{ row.balanceBonus }}</template>
                 </span>
@@ -1181,11 +1214,15 @@ onBeforeUnmount(() => {
           </p>
 
           <template v-if="!isVoidMatchFinish">
-            <p v-if="(payload?.winning_team_ids ?? []).length === 1">
-              {{ t('teamTerritory.finish.winners') }}:
-              {{ payload?.winning_team_ids?.map((x: number) => teams.find((tm: any) => tm.id === x)?.name ?? x + 1).join(', ') }}
+            <p v-if="myTeamMatchOutcome === 'win'" class="tt-result-outcome tt-result-outcome--win">
+              {{ t('teamTerritory.finish.youWon') }}
             </p>
-            <p v-else-if="isScoreTie" class="muted">{{ t('teamTerritory.finish.tie') }}</p>
+            <p v-else-if="myTeamMatchOutcome === 'loss'" class="tt-result-outcome tt-result-outcome--loss">
+              {{ t('teamTerritory.finish.youLost') }}
+            </p>
+            <p v-else-if="myTeamMatchOutcome === 'tie'" class="tt-result-outcome tt-result-outcome--tie">
+              {{ t('teamTerritory.finish.tie') }}
+            </p>
             <p v-if="myMatchReward.kind === 'win'" class="tt-reward">
               {{ t('teamTerritory.finish.rewardWin', { diamonds: myMatchReward.diamonds }) }}
             </p>
@@ -1725,6 +1762,11 @@ onBeforeUnmount(() => {
   font-size: 0.72rem;
   opacity: 0.75;
   color: #ce93d8;
+}
+.tt-team-line-combo {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #ffb74d;
 }
 .tt-sidebar-actions {
   display: grid;
@@ -2434,6 +2476,24 @@ onBeforeUnmount(() => {
   color: #a5d6a7;
   font-weight: 700;
 }
+.tt-result-outcome {
+  margin: 1rem 0 0.75rem;
+  font-size: 1.65rem;
+  font-weight: 800;
+  line-height: 1.25;
+  text-align: center;
+}
+.tt-result-outcome--win {
+  color: #6fcf97;
+}
+.tt-result-outcome--loss {
+  color: #e57373;
+}
+.tt-result-outcome--tie {
+  color: #b0bec5;
+  font-size: 1.35rem;
+  font-weight: 700;
+}
 .tt-reward--soft {
   color: #90caf9;
   font-weight: 600;
@@ -2537,6 +2597,49 @@ onBeforeUnmount(() => {
     0 0 8px var(--tt-neon-glow, var(--tt-neon, #fff)),
     0 0 18px var(--tt-neon-soft, var(--tt-neon, #fff)),
     0 0 31px var(--tt-neon-faint, var(--tt-neon, #fff));
+}
+.tt-cell--line-combo {
+  position: relative;
+  z-index: 3;
+  opacity: 1;
+  border: 3px solid #ffb74d;
+  outline: 2px solid rgba(255, 183, 77, 0.85);
+  outline-offset: 0;
+  box-shadow:
+    0 0 0 1px #ffcc80,
+    0 0 0 3px rgba(255, 183, 77, 0.55),
+    0 0 8px rgba(255, 183, 77, 0.65),
+    0 0 18px rgba(255, 183, 77, 0.4),
+    inset 0 0 12px rgba(255, 183, 77, 0.22);
+  animation: tt-line-combo-neon 2.4s ease-in-out infinite;
+}
+.tt-cell--line-combo .tt-cell-label {
+  font-size: 0.62rem;
+  color: #fff3e0;
+}
+.tt-cell--line-combo.tt-cell--picked {
+  outline: 2px solid rgba(255, 255, 255, 0.9);
+}
+@keyframes tt-line-combo-neon {
+  0%,
+  100% {
+    border-color: #ffb74d;
+    box-shadow:
+      0 0 0 1px #ffcc80,
+      0 0 0 3px rgba(255, 183, 77, 0.55),
+      0 0 8px rgba(255, 183, 77, 0.65),
+      0 0 18px rgba(255, 183, 77, 0.4),
+      inset 0 0 12px rgba(255, 183, 77, 0.22);
+  }
+  50% {
+    border-color: #ffe0b2;
+    box-shadow:
+      0 0 0 1px #fff3e0,
+      0 0 0 4px rgba(255, 224, 178, 0.7),
+      0 0 12px rgba(255, 183, 77, 0.85),
+      0 0 24px rgba(255, 183, 77, 0.55),
+      inset 0 0 14px rgba(255, 183, 77, 0.32);
+  }
 }
 @keyframes tt-combo-neon {
   0%,

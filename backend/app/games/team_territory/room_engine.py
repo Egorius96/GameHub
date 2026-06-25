@@ -11,7 +11,7 @@ from typing import Any, Callable
 
 from app.core.config import settings
 from app.games.team_territory.challenge import ChallengeSession, load_spelling_words, pick_mode
-from app.games.team_territory.combos import register_new_combos
+from app.games.team_territory.combos import register_new_combos, register_new_line_combos
 from app.games.team_territory.constants import TeamTerritoryParams, tt_params
 from app.games.team_territory.debug import ensure_debug_phantom_team_for_rewards, team_territory_debug_solo_active
 from app.games.team_territory.grid import cap_c_for_tick, cell_total, grid_size_from_P
@@ -96,11 +96,15 @@ class TerritoryRoom:
     scores: dict[int, int] = field(default_factory=dict)
     combo_counts: dict[int, int] = field(default_factory=dict)
     combo_bonus: dict[int, int] = field(default_factory=dict)
+    line_combo_counts: dict[int, int] = field(default_factory=dict)
+    line_combo_bonus: dict[int, int] = field(default_factory=dict)
     balance_bonus: dict[int, int] = field(default_factory=dict)
     final_scores: dict[int, int] = field(default_factory=dict)
     match_team_sizes: dict[int, int] = field(default_factory=dict)
     completed_triples: set[tuple[int, int, int]] = field(default_factory=set)
+    completed_lines: set[tuple[str, int]] = field(default_factory=set)
     combo_cells: set[int] = field(default_factory=set)
+    line_combo_cells: set[int] = field(default_factory=set)
     combo_center_cells: set[int] = field(default_factory=set)
     ready_deadline_at: datetime | None = None
     lobby_idle_since: datetime | None = None
@@ -369,11 +373,15 @@ class TerritoryRoom:
         self.scores = {i: 0 for i in range(self.num_teams)}
         self.combo_counts = {i: 0 for i in range(self.num_teams)}
         self.combo_bonus = {i: 0 for i in range(self.num_teams)}
+        self.line_combo_counts = {i: 0 for i in range(self.num_teams)}
+        self.line_combo_bonus = {i: 0 for i in range(self.num_teams)}
         self.balance_bonus = {i: 0 for i in range(self.num_teams)}
         self.final_scores = {i: 0 for i in range(self.num_teams)}
         self.match_team_sizes = {i: 0 for i in range(self.num_teams)}
         self.completed_triples = set()
+        self.completed_lines = set()
         self.combo_cells = set()
+        self.line_combo_cells = set()
         self.combo_center_cells = set()
         self.insufficient_teams_online_since = None
         self.team_last_activity_at = {}
@@ -494,20 +502,23 @@ class TerritoryRoom:
         self.finish_reason = reason
         p = self.params()
         bonus_pts = max(0, int(p.combo_bonus_points))
+        line_pts = max(0, int(p.line_combo_bonus_points))
         sizes = self.match_team_sizes or {i: 0 for i in range(self.num_teams)}
         active_sizes = [c for c in sizes.values() if c > 0]
         max_size = max(active_sizes) if active_sizes else 1
         for t in range(self.num_teams):
             territory = sum(1 for c in self.cells if c == t)
             combo = self.combo_counts.get(t, 0) * bonus_pts
+            line_combo = self.line_combo_counts.get(t, 0) * line_pts
             team_size = sizes.get(t, 0)
             balance = 0
             if team_size > 0 and team_size < max_size:
                 balance = int(round(territory * (max_size / team_size - 1)))
             self.scores[t] = territory
             self.combo_bonus[t] = combo
+            self.line_combo_bonus[t] = line_combo
             self.balance_bonus[t] = balance
-            self.final_scores[t] = territory + combo + balance
+            self.final_scores[t] = territory + combo + line_combo + balance
         best = max(self.final_scores.values()) if self.final_scores else 0
         self.winning_team_ids = [tid for tid, sc in self.final_scores.items() if sc == best and best > 0]
         if reason in ("stale_idle", "opponent_left", "one_sided_idle"):
@@ -595,6 +606,15 @@ class TerritoryRoom:
                 self.combo_cells,
                 self.combo_center_cells,
             )
+            register_new_line_combos(
+                self.cells,
+                self.g,
+                painted,
+                self.completed_lines,
+                self.line_combo_counts,
+                self.line_combo_cells,
+                self.combo_cells,
+            )
 
         self.tick_index += 1
         self.next_tick_at = now + timedelta(milliseconds=p.tick_ms)
@@ -648,11 +668,15 @@ class TerritoryRoom:
         self.scores = {}
         self.combo_counts = {}
         self.combo_bonus = {}
+        self.line_combo_counts = {}
+        self.line_combo_bonus = {}
         self.balance_bonus = {}
         self.final_scores = {}
         self.match_team_sizes = {}
         self.completed_triples = set()
+        self.completed_lines = set()
         self.combo_cells = set()
+        self.line_combo_cells = set()
         self.combo_center_cells = set()
         self.stall_phase = "none"
         self.stall_warn_deadline_at = None
@@ -734,6 +758,8 @@ class TerritoryRoom:
             "scores": dict(self.scores),
             "combo_counts": {str(k): v for k, v in sorted(self.combo_counts.items())},
             "combo_bonus": {str(k): v for k, v in sorted(self.combo_bonus.items())},
+            "line_combo_counts": {str(k): v for k, v in sorted(self.line_combo_counts.items())},
+            "line_combo_bonus": {str(k): v for k, v in sorted(self.line_combo_bonus.items())},
             "balance_bonus": {str(k): v for k, v in sorted(self.balance_bonus.items())},
             "match_team_sizes": {str(k): v for k, v in sorted(self.match_team_sizes.items())},
             "lobby_teams_imbalanced": self.lobby_teams_imbalanced() if self.phase == "lobby" else False,
@@ -742,6 +768,7 @@ class TerritoryRoom:
             "lobby_countdown": self.lobby_countdown_public(now),
             "final_scores": {str(k): v for k, v in sorted(self.final_scores.items())},
             "combo_cells": sorted(self.combo_cells),
+            "line_combo_cells": sorted(self.line_combo_cells),
             "combo_center_cells": sorted(self.combo_center_cells),
             "tick_claims": tick_claims_snapshot(self),
             "players": {
@@ -787,6 +814,7 @@ class TerritoryRoom:
                 "challenge_math_sec": p.challenge_math_sec,
                 "challenge_sequence_sec": p.challenge_sequence_sec,
                 "combo_bonus_points": p.combo_bonus_points,
+                "line_combo_bonus_points": p.line_combo_bonus_points,
                 "repaint_cost": p.repaint_cost,
                 "challenge_max_paint_start": p.challenge_max_paint_start,
                 "regen_sec": p.regen_sec,
