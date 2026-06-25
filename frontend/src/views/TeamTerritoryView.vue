@@ -81,6 +81,7 @@ const cfg = computed(() => payload.value?.config ?? {})
 const maxPlayersPerTeam = computed(() => Number(cfg.value?.max_players_per_team ?? 4))
 const maxPlayersInLobby = computed(() => Number(cfg.value?.max_players_in_lobby ?? 16))
 const lineComboPoints = computed(() => Number(cfg.value?.line_combo_bonus_points ?? 3))
+const comboBonusPoints = computed(() => Number(cfg.value?.combo_bonus_points ?? 1))
 const debugSoloLobby = computed(() => Boolean(cfg.value?.debug_solo_lobby))
 const challenge = computed(() => payload.value?.challenge ?? null)
 const stall = computed(() => payload.value?.stall ?? {})
@@ -98,24 +99,104 @@ const teamScores = computed(() => {
   }
   const comboMap = payload.value?.combo_counts ?? {}
   const lineComboMap = payload.value?.line_combo_counts ?? {}
-  return teams.value.map((tm: any) => ({
-    id: Number(tm.id),
-    name: String(tm.name ?? `Team ${Number(tm.id) + 1}`),
-    hex: String(tm.hex ?? '#666'),
-    score: counts[Number(tm.id)] ?? 0,
-    combos: Number(comboMap[String(tm.id)] ?? comboMap[Number(tm.id)] ?? 0),
-    lineCombos: Number(lineComboMap[String(tm.id)] ?? lineComboMap[Number(tm.id)] ?? 0),
-  }))
+  const cPts = comboBonusPoints.value
+  const lPts = lineComboPoints.value
+  return teams.value.map((tm: any) => {
+    const id = Number(tm.id)
+    const territory = counts[id] ?? 0
+    const combos = Number(comboMap[String(id)] ?? comboMap[id] ?? 0)
+    const lineCombos = Number(lineComboMap[String(id)] ?? lineComboMap[id] ?? 0)
+    const comboPts = combos * cPts
+    const linePts = lineCombos * lPts
+    return {
+      id,
+      name: String(tm.name ?? `Team ${Number(tm.id) + 1}`),
+      hex: String(tm.hex ?? '#666'),
+      territory,
+      score: territory,
+      totalScore: territory + comboPts + linePts,
+      combos,
+      lineCombos,
+      comboPts,
+      linePts,
+    }
+  })
 })
 
 const teamScoresRanked = computed(() =>
   [...teamScores.value].sort((a, b) => {
-    if (b.score !== a.score) return b.score - a.score
+    if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore
     if (b.lineCombos !== a.lineCombos) return b.lineCombos - a.lineCombos
     if (b.combos !== a.combos) return b.combos - a.combos
     return a.id - b.id
   }),
 )
+
+const teamRankSnapshot = ref<Record<number, number>>({})
+const overtookFlashUntil = ref<Record<number, number>>({})
+const myTeamPassedFlash = ref(false)
+
+function isOvertookFlashing(teamId: number): boolean {
+  void tickNow.value
+  return (overtookFlashUntil.value[teamId] ?? 0) > Date.now()
+}
+
+watch(
+  teamScoresRanked,
+  (ranked) => {
+    const newSnap: Record<number, number> = {}
+    ranked.forEach((t, i) => {
+      newSnap[t.id] = i
+    })
+    if (phase.value !== 'playing' || reducedMotion.value) {
+      teamRankSnapshot.value = newSnap
+      return
+    }
+    const myId = myTeamId.value
+    if (myId == null) {
+      teamRankSnapshot.value = newSnap
+      return
+    }
+    const prev = teamRankSnapshot.value
+    const myOld = prev[myId]
+    const myNew = newSnap[myId]
+    if (myOld !== undefined && myNew !== undefined) {
+      let playedOvertake = false
+      for (const t of ranked) {
+        if (t.id === myId) continue
+        const oldR = prev[t.id]
+        const newR = newSnap[t.id]
+        if (oldR === undefined || newR === undefined) continue
+        if (oldR >= myOld && newR < myNew) {
+          overtookFlashUntil.value = {
+            ...overtookFlashUntil.value,
+            [t.id]: Date.now() + 2600,
+          }
+          if (!playedOvertake) {
+            playSfx('overtake')
+            playedOvertake = true
+          }
+        }
+      }
+      if (myNew > myOld) {
+        myTeamPassedFlash.value = true
+        window.setTimeout(() => {
+          myTeamPassedFlash.value = false
+        }, 2600)
+      }
+    }
+    teamRankSnapshot.value = newSnap
+  },
+  { flush: 'post' },
+)
+
+watch(phase, (p) => {
+  if (p !== 'playing') {
+    teamRankSnapshot.value = {}
+    overtookFlashUntil.value = {}
+    myTeamPassedFlash.value = false
+  }
+})
 
 const comboCenterCellSet = computed(() => {
   const raw = payload.value?.combo_center_cells
@@ -432,7 +513,26 @@ function triggerPaintBurst() {
   }, 900)
 }
 
-type LobbyPlayer = { username: string; team_id: number; ready: boolean; connected: boolean }
+type LobbyPlayer = { username: string; team_id: number; ready: boolean; connected: boolean; avatar_url?: string }
+
+const avatarLoadFailed = ref<Record<string, boolean>>({})
+
+function playerInitials(username: string): string {
+  const u = String(username ?? '').trim()
+  if (!u) return '?'
+  return u.slice(0, 2).toUpperCase()
+}
+
+function playerAvatarSrc(p: LobbyPlayer): string | null {
+  if (avatarLoadFailed.value[p.username]) return null
+  const url = String(p.avatar_url ?? '').trim()
+  if (!url || url.includes('default_avatar')) return null
+  return url
+}
+
+function onAvatarError(username: string) {
+  avatarLoadFailed.value = { ...avatarLoadFailed.value, [username]: true }
+}
 
 const lobbyRoster = computed((): LobbyPlayer[] => {
   const out: LobbyPlayer[] = []
@@ -447,6 +547,7 @@ const lobbyRoster = computed((): LobbyPlayer[] => {
       team_id: teamId,
       ready: !!slot.ready,
       connected: true,
+      avatar_url: slot.avatar_url ? String(slot.avatar_url) : undefined,
     })
   }
   return out
@@ -998,10 +1099,22 @@ onBeforeUnmount(() => {
           </h3>
           <ul class="tt-roster-list">
             <li v-for="p in myTeam?.players ?? []" :key="p.username" class="tt-roster-item" :class="{ 'tt-roster-item--ready': p.ready }">
-              <span class="tt-roster-name">
-                {{ p.username }}
-                <span v-if="p.username === auth.username" class="tt-you">{{ t('teamTerritory.lobby.you') }}</span>
-              </span>
+              <div class="tt-roster-player">
+                <div class="tt-roster-avatar" :class="{ 'tt-roster-avatar--ready': p.ready }">
+                  <img
+                    v-if="playerAvatarSrc(p)"
+                    :src="playerAvatarSrc(p)!"
+                    alt=""
+                    loading="lazy"
+                    @error="onAvatarError(p.username)"
+                  />
+                  <span v-else class="tt-roster-avatar-fallback">{{ playerInitials(p.username) }}</span>
+                </div>
+                <span class="tt-roster-name">
+                  {{ p.username }}
+                  <span v-if="p.username === auth.username" class="tt-you">{{ t('teamTerritory.lobby.you') }}</span>
+                </span>
+              </div>
               <span v-if="p.ready" class="ok">{{ t('teamTerritory.lobby.readyFlag') }}</span>
             </li>
             <li v-if="!(myTeam?.players?.length)" class="tt-roster-empty muted">{{ t('teamTerritory.lobby.emptyTeam') }}</li>
@@ -1021,7 +1134,19 @@ onBeforeUnmount(() => {
             </div>
             <ul class="tt-roster-list tt-roster-list--compact">
               <li v-for="p in ot.players" :key="p.username" class="tt-roster-item" :class="{ 'tt-roster-item--ready': p.ready }">
-                <span>{{ p.username }}</span>
+                <div class="tt-roster-player">
+                  <div class="tt-roster-avatar" :class="{ 'tt-roster-avatar--ready': p.ready }">
+                    <img
+                      v-if="playerAvatarSrc(p)"
+                      :src="playerAvatarSrc(p)!"
+                      alt=""
+                      loading="lazy"
+                      @error="onAvatarError(p.username)"
+                    />
+                    <span v-else class="tt-roster-avatar-fallback">{{ playerInitials(p.username) }}</span>
+                  </div>
+                  <span class="tt-roster-name">{{ p.username }}</span>
+                </div>
                 <span v-if="p.ready" class="ok">{{ t('teamTerritory.lobby.readyFlag') }}</span>
               </li>
               <li v-if="!ot.players.length" class="tt-roster-empty muted">—</li>
@@ -1151,15 +1276,19 @@ onBeforeUnmount(() => {
             v-for="ts in teamScoresRanked"
             :key="ts.id"
             class="tt-team-row"
-            :class="{ 'tt-team-row--mine': ts.id === myTeamId }"
+            :class="{
+              'tt-team-row--mine': ts.id === myTeamId,
+              'tt-team-row--overtook': isOvertookFlashing(ts.id),
+              'tt-team-row--passed': ts.id === myTeamId && myTeamPassedFlash,
+            }"
             :style="{ '--team-color': ts.hex }"
           >
             <span class="tt-team-swatch" :style="{ background: ts.hex }" />
             <span class="tt-team-name">{{ ts.name }}</span>
             <span class="tt-team-score-group">
-              <span class="tt-team-score">{{ ts.score }}</span>
-              <span v-if="ts.lineCombos > 0" class="tt-team-line-combo">+{{ ts.lineCombos * lineComboPoints }}</span>
-              <span v-if="ts.combos > 0" class="tt-team-combo">+{{ ts.combos }}</span>
+              <span class="tt-team-score">{{ ts.territory }}</span>
+              <span v-if="ts.linePts > 0" class="tt-team-line-combo">+{{ ts.linePts }}</span>
+              <span v-if="ts.comboPts > 0" class="tt-team-combo">+{{ ts.comboPts }}</span>
             </span>
           </div>
         </TransitionGroup>
@@ -1716,7 +1845,7 @@ onBeforeUnmount(() => {
   position: relative;
 }
 .tt-team-rank-move {
-  transition: transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .tt-team-rank-enter-active,
 .tt-team-rank-leave-active {
@@ -1740,6 +1869,81 @@ onBeforeUnmount(() => {
   border-color: var(--team-color, rgba(255, 255, 255, 0.35));
   box-shadow: inset 3px 0 0 var(--team-color, #fff);
   background: rgba(255, 255, 255, 0.06);
+}
+.tt-team-row--overtook {
+  position: relative;
+  z-index: 3;
+  animation: tt-overtake-flash 2.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.tt-team-row--overtook::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 12px;
+  pointer-events: none;
+  background: linear-gradient(
+    105deg,
+    transparent 0%,
+    rgba(255, 213, 79, 0.55) 45%,
+    rgba(255, 87, 34, 0.75) 55%,
+    transparent 100%
+  );
+  opacity: 0;
+  animation: tt-overtake-shimmer 2.6s ease-out;
+}
+.tt-team-row--passed {
+  animation: tt-passed-warn 2.6s ease-out;
+}
+@keyframes tt-overtake-flash {
+  0% {
+    transform: scale(1);
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow: none;
+  }
+  12% {
+    transform: scale(1.05);
+    border-color: rgba(255, 183, 77, 0.95);
+    box-shadow:
+      0 0 0 2px rgba(255, 183, 77, 0.5),
+      0 0 22px rgba(255, 87, 34, 0.75),
+      0 0 40px rgba(255, 152, 0, 0.45);
+  }
+  35% {
+    transform: scale(1.02);
+  }
+  100% {
+    transform: scale(1);
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow: none;
+  }
+}
+@keyframes tt-overtake-shimmer {
+  0%,
+  8% {
+    opacity: 0;
+    transform: translateX(-120%);
+  }
+  18% {
+    opacity: 1;
+  }
+  45% {
+    opacity: 0;
+    transform: translateX(120%);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes tt-passed-warn {
+  0%,
+  100% {
+    box-shadow: inset 3px 0 0 var(--team-color, #fff);
+  }
+  15% {
+    box-shadow:
+      inset 3px 0 0 #ef5350,
+      0 0 18px rgba(239, 83, 80, 0.45);
+  }
 }
 .tt-team-swatch {
   width: 14px;
@@ -2397,11 +2601,53 @@ onBeforeUnmount(() => {
   padding: 6px 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
+.tt-roster-player {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+.tt-roster-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  border: 2px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.35);
+}
+.tt-roster-avatar--ready {
+  border-color: rgba(129, 199, 132, 0.85);
+  box-shadow: 0 0 0 1px rgba(129, 199, 132, 0.35);
+}
+.tt-roster-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.tt-roster-avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.88);
+}
+.tt-roster-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .tt-roster-item:last-child {
   border-bottom: none;
 }
-.tt-roster-item--ready .tt-roster-name,
-.tt-roster-item--ready > span:first-child {
+.tt-roster-item--ready .tt-roster-name {
   font-weight: 600;
 }
 .tt-roster-empty {
@@ -2716,6 +2962,14 @@ onBeforeUnmount(() => {
   }
   .tt-team-rank-move {
     transition: none;
+  }
+  .tt-team-row--overtook,
+  .tt-team-row--passed {
+    animation: none;
+  }
+  .tt-team-row--overtook::after {
+    animation: none;
+    display: none;
   }
 }
 </style>

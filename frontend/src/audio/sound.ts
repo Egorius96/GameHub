@@ -8,6 +8,7 @@ const sfx: Record<string, HTMLAudioElement> = {
   rock: new Audio('/assets/original_music/rockhit.mp3'),
   gameover: new Audio('/assets/original_music/gameover.mp3'),
   purchase: new Audio('/assets/original_music/purchase.mp3'),
+  overtake: new Audio('/assets/original_music/diamond.mp3'),
 }
 
 const gameMusicList = [
@@ -40,6 +41,7 @@ export function playSfx(name: keyof typeof sfx) {
   unlockAudio()
   const a = sfx[name]
   try {
+    a.volume = name === 'overtake' ? 0.48 : 0.25
     a.currentTime = 0
     void a.play()
   } catch {

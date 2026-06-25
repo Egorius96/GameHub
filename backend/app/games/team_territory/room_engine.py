@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 from app.core.config import settings
+from app.core.gameshub import ensure_gameshub_schema
 from app.games.team_territory.challenge import ChallengeSession, load_spelling_words, pick_mode
 from app.games.team_territory.combos import register_new_combos, register_new_line_combos
 from app.games.team_territory.constants import TeamTerritoryParams, tt_params
@@ -64,6 +65,7 @@ class PlayerSlot:
     last_challenge_started_at: datetime | None = None
     challenge: ChallengeSession | None = None
     claim_submitted: bool = False
+    avatar_url: str = ""
 
     def is_active_player(self) -> bool:
         return self.role == "player" and self.connected
@@ -780,6 +782,7 @@ class TerritoryRoom:
                     "connected": s.connected,
                     "paint": s.paint,
                     "personal_cells": s.personal_cells,
+                    "avatar_url": s.avatar_url or settings.default_avatar_url,
                 }
                 for u, s in self.players.items()
             },
@@ -882,6 +885,26 @@ def remove_lobby_player(room: TerritoryRoom, username: str) -> bool:
     return room.players.pop(username, None) is not None
 
 
+def player_avatar_url(username: str) -> str:
+    try:
+        from app.db.models import GameHubUser
+        from app.db.session import _session_factory
+
+        db = _session_factory()()
+        try:
+            row = db.query(GameHubUser).filter(GameHubUser.username == username).first()
+            if row and row.other_data:
+                other = ensure_gameshub_schema(row.other_data)
+                url = other.get("avatar_url")
+                if url:
+                    return str(url)
+        finally:
+            db.close()
+    except Exception:
+        pass
+    return settings.default_avatar_url
+
+
 def add_player(
     room: TerritoryRoom,
     username: str,
@@ -897,7 +920,13 @@ def add_player(
         return pl
     room.join_seq += 1
     tid = TEAM_UNASSIGNED if room.phase == "lobby" and role == "player" else default_team_id(room)
-    pl = PlayerSlot(username=username, team_id=tid, role=role, join_order=room.join_seq)
+    pl = PlayerSlot(
+        username=username,
+        team_id=tid,
+        role=role,
+        join_order=room.join_seq,
+        avatar_url=player_avatar_url(username),
+    )
     room.players[username] = pl
     if room.phase == "lobby" and room.lobby_idle_since is None:
         room.lobby_idle_since = now
