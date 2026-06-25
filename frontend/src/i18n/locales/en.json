@@ -228,6 +228,18 @@
       "leaveRoom": "Leave lobby",
       "yourTeam": "your team",
       "noTeamYet": "You are in the lobby but not on a team yet — press Join on a team card.",
+      "countdownTitle": "Match starting",
+      "countdownHint": "You can leave your team or the lobby — the countdown pauses if rules are broken.",
+      "countdownPaused": "Countdown paused",
+      "countdownPausedAt": "Remaining: {seconds}s",
+      "countdownRebalance": "Rebalance teams and press Ready again.",
+      "countdownPause": {
+        "teams_imbalanced": "{user} left team «{team}». Teams are unbalanced (difference ≥ 2 players).",
+        "not_enough_players": "Not enough players in the lobby (minimum 2).",
+        "not_enough_teams": "Need ready players on at least 2 teams.",
+        "not_all_ready": "{user} is no longer ready or left team «{team}».",
+        "generic": "Start conditions are not met. Wait for everyone to be ready or rebalance teams."
+      },
       "connecting": "Connecting to server…",
       "myTeam": "Your team",
       "opponents": "Opponents",

@@ -16,7 +16,7 @@ from app.games.team_territory.constants import TeamTerritoryParams, tt_params
 from app.games.team_territory.debug import ensure_debug_phantom_team_for_rewards, team_territory_debug_solo_active
 from app.games.team_territory.grid import cap_c_for_tick, cell_total, grid_size_from_P
 from app.games.team_territory.rewards import player_match_reward_diamonds, player_match_reward_kind, match_rewards_block_reason
-from app.games.team_territory.teams import teams_public_meta
+from app.games.team_territory.teams import TEAM_COLORS, teams_public_meta
 
 TEAM_UNASSIGNED = -1
 
@@ -105,6 +105,12 @@ class TerritoryRoom:
     insufficient_teams_online_since: datetime | None = None
     team_last_activity_at: dict[int, datetime] = field(default_factory=dict)
     debug_cheat_claims: dict[str, set[int]] = field(default_factory=dict)
+    lobby_countdown_until: datetime | None = None
+    lobby_countdown_paused: bool = False
+    lobby_countdown_paused_remaining_sec: float = 0.0
+    lobby_countdown_pause_reason: str | None = None
+    lobby_countdown_pause_detail: dict[str, Any] = field(default_factory=dict)
+    lobby_countdown_last_event: dict[str, Any] = field(default_factory=dict)
     join_seq: int = 0
     _rng: random.Random = field(default_factory=lambda: random.Random(secrets.randbits(128)))
 
@@ -193,7 +199,149 @@ class TerritoryRoom:
             return False
         return all(pl.ready for pl in roster)
 
+    def _lobby_min_players(self) -> int:
+        p = self.params()
+        return 1 if team_territory_debug_solo_active() else max(2, p.min_participants)
+
+    def _team_meta(self, team_id: int) -> dict[str, Any]:
+        if 0 <= team_id < len(TEAM_COLORS):
+            t = TEAM_COLORS[team_id]
+            return {"team_id": team_id, "key": t["key"], "name": t["name"]}
+        return {"team_id": team_id, "key": str(team_id), "name": str(team_id)}
+
+    def lobby_countdown_active(self) -> bool:
+        return self.lobby_countdown_until is not None or self.lobby_countdown_paused
+
+    def clear_lobby_countdown(self) -> None:
+        self.lobby_countdown_until = None
+        self.lobby_countdown_paused = False
+        self.lobby_countdown_paused_remaining_sec = 0.0
+        self.lobby_countdown_pause_reason = None
+        self.lobby_countdown_pause_detail = {}
+        self.lobby_countdown_last_event = {}
+
+    def begin_lobby_countdown(self, now: datetime) -> None:
+        if not self.can_start_match(now):
+            return
+        sec = max(1, int(self.params().lobby_countdown_sec))
+        self.lobby_countdown_until = now + timedelta(seconds=sec)
+        self.lobby_countdown_paused = False
+        self.lobby_countdown_paused_remaining_sec = float(sec)
+        self.lobby_countdown_pause_reason = None
+        self.lobby_countdown_pause_detail = {}
+
+    def pause_lobby_countdown(self, now: datetime, reason: str, detail: dict[str, Any]) -> None:
+        if self.lobby_countdown_until is not None and not self.lobby_countdown_paused:
+            self.lobby_countdown_paused_remaining_sec = max(
+                0.0, (self.lobby_countdown_until - now).total_seconds()
+            )
+        self.lobby_countdown_until = None
+        self.lobby_countdown_paused = True
+        self.lobby_countdown_pause_reason = reason
+        merged = dict(detail)
+        if self.lobby_countdown_last_event:
+            merged["last_event"] = dict(self.lobby_countdown_last_event)
+        self.lobby_countdown_pause_detail = merged
+
+    def resume_lobby_countdown(self, now: datetime) -> None:
+        if not self.can_start_match(now):
+            return
+        sec = max(0.5, float(self.lobby_countdown_paused_remaining_sec or self.params().lobby_countdown_sec))
+        self.lobby_countdown_until = now + timedelta(seconds=sec)
+        self.lobby_countdown_paused = False
+        self.lobby_countdown_pause_reason = None
+        self.lobby_countdown_pause_detail = {}
+
+    def _lobby_countdown_failure(self) -> tuple[str, dict[str, Any]] | None:
+        roster = self.lobby_roster_players()
+        min_players = self._lobby_min_players()
+        if len(roster) < min_players:
+            return "not_enough_players", {
+                "players": len(roster),
+                "required": min_players,
+            }
+        if not team_territory_debug_solo_active() and self.lobby_teams_imbalanced():
+            return "teams_imbalanced", {"counts": dict(self.lobby_team_player_counts())}
+        not_ready = [p.username for p in roster if not p.ready]
+        if not_ready:
+            return "not_all_ready", {"waiting": not_ready}
+        ready = self.ready_players()
+        if not self._ready_meets_min_start(ready):
+            return "not_enough_teams", {
+                "teams_ready": len(self.teams_represented(ready)),
+                "required_teams": 1 if team_territory_debug_solo_active() else 2,
+            }
+        return None
+
+    def on_lobby_roster_changed(self, now: datetime, event: dict[str, Any] | None = None) -> None:
+        if self.phase != "lobby":
+            return
+        if event:
+            ev = dict(event)
+            tid = ev.get("team_id")
+            if isinstance(tid, int) and tid >= 0:
+                ev["team"] = self._team_meta(tid)
+            self.lobby_countdown_last_event = ev
+        if not self.lobby_countdown_active():
+            if self.can_start_match(now):
+                self.begin_lobby_countdown(now)
+            return
+        if len(self.ready_players()) == 0:
+            self.clear_lobby_countdown()
+            return
+        fail = self._lobby_countdown_failure()
+        if fail is not None:
+            reason, detail = fail
+            self.pause_lobby_countdown(now, reason, detail)
+            return
+        if self.lobby_countdown_paused and self.can_start_match(now):
+            self.resume_lobby_countdown(now)
+
+    def tick_lobby_countdown(self, now: datetime) -> None:
+        if self.phase != "lobby":
+            return
+        if not self.lobby_countdown_active():
+            if self.can_start_match(now):
+                self.begin_lobby_countdown(now)
+            return
+        if len(self.ready_players()) == 0:
+            self.clear_lobby_countdown()
+            return
+        fail = self._lobby_countdown_failure()
+        if fail is not None:
+            if not self.lobby_countdown_paused:
+                reason, detail = fail
+                self.pause_lobby_countdown(now, reason, detail)
+            return
+        if self.lobby_countdown_paused:
+            if self.can_start_match(now):
+                self.resume_lobby_countdown(now)
+            return
+        if self.lobby_countdown_until and now >= self.lobby_countdown_until:
+            self.clear_lobby_countdown()
+            if self.can_start_match(now):
+                self.start_match(now)
+
+    def lobby_countdown_public(self, now: datetime) -> dict[str, Any]:
+        if self.phase != "lobby" or not self.lobby_countdown_active():
+            return {"active": False, "paused": False, "seconds_left": 0}
+        seconds_left = 0.0
+        if self.lobby_countdown_paused:
+            seconds_left = float(self.lobby_countdown_paused_remaining_sec)
+        elif self.lobby_countdown_until is not None:
+            seconds_left = max(0.0, (self.lobby_countdown_until - now).total_seconds())
+        return {
+            "active": True,
+            "paused": self.lobby_countdown_paused,
+            "seconds_left": round(seconds_left, 1),
+            "total_sec": int(self.params().lobby_countdown_sec),
+            "until": self.lobby_countdown_until.isoformat() if self.lobby_countdown_until else None,
+            "pause_reason": self.lobby_countdown_pause_reason,
+            "pause_detail": dict(self.lobby_countdown_pause_detail),
+        }
+
     def start_match(self, now: datetime) -> None:
+        self.clear_lobby_countdown()
         p = self.params()
         participants = [x for x in self.lobby_roster_players() if x.ready]
         if not self._ready_meets_min_start(participants):
@@ -260,6 +408,7 @@ class TerritoryRoom:
         return (now - anchor).total_seconds() >= p.lobby_idle_close_sec
 
     def reset_idle_lobby(self, now: datetime) -> None:
+        self.clear_lobby_countdown()
         self.players.clear()
         self.spectator_queue_next.clear()
         self.ready_deadline_at = None
@@ -481,6 +630,7 @@ class TerritoryRoom:
         return out
 
     def reset_to_lobby(self, now: datetime) -> None:
+        self.clear_lobby_countdown()
         self.phase = "lobby"
         self.cells = []
         self.tick_index = 0
@@ -584,6 +734,7 @@ class TerritoryRoom:
             "lobby_teams_imbalanced": self.lobby_teams_imbalanced() if self.phase == "lobby" else False,
             "lobby_connected_count": self.lobby_connected_count() if self.phase == "lobby" else 0,
             "lobby_in_team_count": len(self.lobby_roster_players()) if self.phase == "lobby" else 0,
+            "lobby_countdown": self.lobby_countdown_public(now),
             "final_scores": {str(k): v for k, v in sorted(self.final_scores.items())},
             "combo_cells": sorted(self.combo_cells),
             "combo_center_cells": sorted(self.combo_center_cells),
@@ -639,6 +790,7 @@ class TerritoryRoom:
                 "tie_diamonds": p.tie_diamonds,
                 "min_ticks_for_reward": p.min_ticks_for_reward,
                 "ready_timeout_sec": p.ready_timeout_sec,
+                "lobby_countdown_sec": p.lobby_countdown_sec,
                 "debug_solo_lobby": team_territory_debug_solo_active(),
             },
             "ready_deadline_at": self.ready_deadline_at.isoformat() if self.ready_deadline_at else None,

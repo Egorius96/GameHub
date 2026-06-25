@@ -488,6 +488,51 @@ const lobbyCanStart = computed(() => {
   return lobbyReadyStats.value.teamsReady >= 2
 })
 
+const lobbyCountdown = computed(() => (payload.value?.lobby_countdown ?? { active: false }) as {
+  active?: boolean
+  paused?: boolean
+  seconds_left?: number
+  total_sec?: number
+  until?: string
+  pause_reason?: string
+  pause_detail?: Record<string, unknown>
+})
+
+const countdownDisplaySec = computed(() => {
+  void tickNow.value
+  const cd = lobbyCountdown.value
+  if (!cd?.active) return 0
+  if (cd.paused) return Math.max(0, Math.ceil(Number(cd.seconds_left ?? 0)))
+  const until = cd.until ? Date.parse(String(cd.until)) : Number.NaN
+  if (Number.isFinite(until)) return Math.max(0, Math.ceil((until - Date.now()) / 1000))
+  return Math.max(0, Math.ceil(Number(cd.seconds_left ?? 0)))
+})
+
+function teamLabelById(teamId: number): string {
+  const tm = teams.value.find((x: { id?: number }) => Number(x?.id) === teamId)
+  return tm ? teamLabel(tm) : String(teamId + 1)
+}
+
+const countdownPauseText = computed(() => {
+  const cd = lobbyCountdown.value
+  if (!cd?.paused || !cd.pause_reason) return ''
+  const detail = (cd.pause_detail ?? {}) as Record<string, unknown>
+  const ev = (detail.last_event ?? {}) as Record<string, unknown>
+  const user = String(ev.username ?? '')
+  const team = ev.team as { key?: string; name?: string } | undefined
+  const teamName = team?.key
+    ? (() => {
+        const k = `teamTerritory.teams.${team.key}`
+        const v = t(k)
+        return v !== k ? v : String(team.name ?? '')
+      })()
+    : teamLabelById(Number(ev.team_id ?? -1))
+  const baseKey = `teamTerritory.lobby.countdownPause.${cd.pause_reason}`
+  const base = t(baseKey, { user, team: teamName })
+  if (base !== baseKey) return base
+  return t('teamTerritory.lobby.countdownPause.generic')
+})
+
 function teamHexById(teamId: number): string {
   const tm = teams.value.find((x: any) => Number(x?.id) === teamId)
   return tm?.hex ? String(tm.hex) : '#888'
@@ -647,7 +692,8 @@ function joinTeam(teamId: number) {
 }
 
 function leaveTeam() {
-  if (iAmReady.value || !iAmInTeam.value) return
+  const cdActive = !!lobbyCountdown.value?.active
+  if (iAmReady.value && !cdActive) return
   playSfx('button')
   send({ type: 'leave_team' })
 }
@@ -1220,6 +1266,39 @@ onBeforeUnmount(() => {
         </template>
       </div>
     </div>
+
+    <Teleport to="body">
+      <div v-if="phase === 'lobby' && lobbyCountdown.active" class="tt-countdown-overlay">
+        <div class="tt-countdown-modal card" role="dialog" aria-modal="true">
+          <template v-if="lobbyCountdown.paused">
+            <h3 class="tt-countdown-title tt-countdown-title--paused">{{ t('teamTerritory.lobby.countdownPaused') }}</h3>
+            <p class="tt-countdown-pause-msg">{{ countdownPauseText }}</p>
+            <p class="muted tt-countdown-hint">{{ t('teamTerritory.lobby.countdownRebalance') }}</p>
+            <p class="tt-countdown-pause-timer">
+              {{ t('teamTerritory.lobby.countdownPausedAt', { seconds: countdownDisplaySec }) }}
+            </p>
+          </template>
+          <template v-else>
+            <h3 class="tt-countdown-title">{{ t('teamTerritory.lobby.countdownTitle') }}</h3>
+            <p class="tt-countdown-num" aria-live="polite">{{ countdownDisplaySec }}</p>
+            <p class="muted">{{ t('teamTerritory.lobby.countdownHint') }}</p>
+          </template>
+          <div class="tt-countdown-actions">
+            <button
+              v-if="iAmInTeam"
+              type="button"
+              class="btn btn-sm"
+              @click="leaveTeam"
+            >
+              {{ t('teamTerritory.lobby.leaveTeam') }}
+            </button>
+            <button type="button" class="btn btn-sm" @click="leaveRoom(); router.push('/games')">
+              {{ t('teamTerritory.lobby.leaveRoom') }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 
     <Teleport to="body">
       <div v-if="repaintConfirm" class="tt-repaint-backdrop" @click.self="cancelRepaint">
@@ -2130,6 +2209,60 @@ onBeforeUnmount(() => {
 }
 .tt-leave-room-btn {
   margin-left: 8px;
+}
+.tt-countdown-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 12vh 16px 16px;
+  background: rgba(8, 12, 24, 0.55);
+  pointer-events: none;
+}
+.tt-countdown-modal {
+  pointer-events: auto;
+  width: min(420px, calc(100vw - 32px));
+  padding: 20px 22px;
+  text-align: center;
+  border: 1px solid rgba(129, 199, 132, 0.35);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+.tt-countdown-title {
+  margin: 0 0 8px;
+  font-size: 1.15rem;
+}
+.tt-countdown-title--paused {
+  color: #ffcc80;
+}
+.tt-countdown-num {
+  margin: 8px 0 4px;
+  font-size: 3.5rem;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: #a5d6a7;
+}
+.tt-countdown-pause-msg {
+  margin: 0 0 8px;
+  line-height: 1.45;
+}
+.tt-countdown-hint {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+}
+.tt-countdown-pause-timer {
+  margin: 0 0 12px;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.tt-countdown-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 12px;
 }
 .tt-lobby-hint--warn {
   color: #ffcc80;

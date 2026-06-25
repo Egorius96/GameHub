@@ -79,7 +79,15 @@ class TeamTerritoryManager:
             if not room:
                 return False
             if room.phase == "lobby":
-                return remove_lobby_player(room, username)
+                pl = room.players.get(username)
+                team_id = pl.team_id if pl is not None else TEAM_UNASSIGNED
+                if remove_lobby_player(room, username):
+                    room.on_lobby_roster_changed(
+                        utcnow(),
+                        {"username": username, "action": "leave_room", "team_id": team_id},
+                    )
+                    return True
+                return False
             if username in room.players:
                 room.players[username].connected = False
             return False
@@ -108,8 +116,8 @@ class TeamTerritoryManager:
                 if room.phase == "lobby":
                     if room.lobby_idle_expired(now):
                         room.reset_idle_lobby(now)
-                    elif room.can_start_match(now):
-                        room.start_match(now)
+                    else:
+                        room.tick_lobby_countdown(now)
                 elif room.phase == "playing":
                     room.maybe_finish_stall_or_timer(now)
                     if room.phase == "playing":
@@ -146,8 +154,10 @@ class TeamTerritoryManager:
                     if want_ready and room.lobby_teams_imbalanced():
                         return {"error": "teams_imbalanced"}
                     pl.ready = want_ready
-                    if room.can_start_match(now):
-                        room.start_match(now)
+                    room.on_lobby_roster_changed(
+                        now,
+                        {"username": username, "action": "set_ready", "ready": want_ready, "team_id": pl.team_id},
+                    )
                 return None
 
             if t in ("set_team", "join_team"):
@@ -157,21 +167,37 @@ class TeamTerritoryManager:
                 tid = data.get("team_id")
                 if not isinstance(tid, int) or not (0 <= tid < room.num_teams):
                     return {"error": "bad_team"}
+                old_team = pl.team_id
                 pl.team_id = tid
                 pl.ready = False
+                room.on_lobby_roster_changed(
+                    now,
+                    {"username": username, "action": "join_team", "team_id": tid, "from_team_id": old_team},
+                )
                 return None
 
             if t == "leave_team":
                 pl = room.players.get(username)
                 if not pl or pl.role != "player" or room.phase != "lobby":
                     return {"error": "not_lobby"}
+                old_team = pl.team_id
                 pl.team_id = TEAM_UNASSIGNED
                 pl.ready = False
+                room.on_lobby_roster_changed(
+                    now,
+                    {"username": username, "action": "leave_team", "team_id": old_team},
+                )
                 return None
 
             if t == "leave_room":
                 if room.phase == "lobby":
-                    remove_lobby_player(room, username)
+                    pl = room.players.get(username)
+                    team_id = pl.team_id if pl is not None else TEAM_UNASSIGNED
+                    if remove_lobby_player(room, username):
+                        room.on_lobby_roster_changed(
+                            now,
+                            {"username": username, "action": "leave_room", "team_id": team_id},
+                        )
                 return None
 
             if t == "claim":

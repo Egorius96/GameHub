@@ -65,6 +65,7 @@ class Settings(BaseModel):
     tt_hud_ink_poll_sec: float = Field(default_factory=lambda: float(os.getenv("TT_HUD_INK_POLL_SEC", "2.5")))
     tt_min_ticks_for_reward: int = Field(default_factory=lambda: int(os.getenv("TT_MIN_TICKS_FOR_REWARD", "3")))
     tt_lobby_idle_close_sec: int = Field(default_factory=lambda: int(os.getenv("TT_LOBBY_IDLE_CLOSE_SEC", "600")))
+    tt_lobby_countdown_sec: int = Field(default_factory=lambda: int(os.getenv("TT_LOBBY_COUNTDOWN_SEC", "10")))
     catalog_username: str = "gamehub_catalog"
     catalog_password: str = "gamehub_catalog_password"
     jwt_secret: str = "pro-racing-hardcoded-secret-key"

@@ -42,6 +42,7 @@ class TeamTerritoryParams:
     hud_ink_poll_sec: float
     min_ticks_for_reward: int
     lobby_idle_close_sec: int
+    lobby_countdown_sec: int
     combo_bonus_points: int
     repaint_cost: int
     opponent_left_grace_sec: int
@@ -84,6 +85,7 @@ def tt_params() -> TeamTerritoryParams:
         hud_ink_poll_sec=float(s.tt_hud_ink_poll_sec),
         min_ticks_for_reward=int(s.tt_min_ticks_for_reward),
         lobby_idle_close_sec=int(s.tt_lobby_idle_close_sec),
+        lobby_countdown_sec=int(s.tt_lobby_countdown_sec),
         combo_bonus_points=int(s.tt_combo_bonus_points),
         repaint_cost=int(s.tt_repaint_cost),
         opponent_left_grace_sec=max(5, int(s.tt_opponent_left_grace_sec)),

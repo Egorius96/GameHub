@@ -45,6 +45,7 @@ def p() -> TeamTerritoryParams:
         hud_ink_poll_sec=2.5,
         min_ticks_for_reward=3,
         lobby_idle_close_sec=600,
+        lobby_countdown_sec=10,
         combo_bonus_points=1,
         repaint_cost=2,
         opponent_left_grace_sec=60,
@@ -137,6 +138,62 @@ def test_add_player_starts_unassigned_in_lobby() -> None:
     room = TerritoryRoom(room_id="t", num_teams=4)
     pl = add_player(room, "u", role="player", now=utcnow())
     assert pl.team_id == TEAM_UNASSIGNED
+
+
+def test_lobby_countdown_begins_when_all_ready() -> None:
+    now = utcnow()
+    room = _room_with_players(["a", "b"], ready=[True, True])
+    assert room.can_start_match(now) is True
+    room.begin_lobby_countdown(now)
+    assert room.lobby_countdown_active() is True
+    assert room.lobby_countdown_paused is False
+    assert room.lobby_countdown_until is not None
+
+
+def test_lobby_countdown_pauses_on_leave_team() -> None:
+    from app.games.team_territory.room_engine import TEAM_UNASSIGNED
+
+    now = utcnow()
+    room = _room_with_players(["a", "b"], ready=[True, True])
+    room.begin_lobby_countdown(now)
+    room.players["a"].team_id = 0
+    room.players["b"].team_id = 1
+    room.players["a"].team_id = TEAM_UNASSIGNED
+    room.players["a"].ready = False
+    room.on_lobby_roster_changed(
+        now,
+        {"username": "a", "action": "leave_team", "team_id": 0},
+    )
+    assert room.lobby_countdown_paused is True
+    assert room.lobby_countdown_pause_reason == "not_enough_players"
+
+
+def test_lobby_countdown_pauses_when_player_unreadies() -> None:
+    now = utcnow()
+    room = _room_with_players(["a", "b"], ready=[True, True])
+    room.players["a"].team_id = 0
+    room.players["b"].team_id = 1
+    room.begin_lobby_countdown(now)
+    room.players["b"].ready = False
+    room.on_lobby_roster_changed(
+        now,
+        {"username": "b", "action": "set_ready", "ready": False, "team_id": 1},
+    )
+    assert room.lobby_countdown_paused is True
+    assert room.lobby_countdown_pause_reason == "not_all_ready"
+
+
+def test_lobby_countdown_starts_after_expire() -> None:
+    from app.games.team_territory.room_engine import TEAM_UNASSIGNED
+
+    now = utcnow()
+    room = _room_with_players(["a", "b"], ready=[True, True])
+    room.players["a"].team_id = 0
+    room.players["b"].team_id = 1
+    room.begin_lobby_countdown(now)
+    room.lobby_countdown_until = now - timedelta(seconds=1)
+    room.tick_lobby_countdown(now)
+    assert room.phase == "playing"
 
 
 def test_debug_row1_cheat_finishes_with_win(monkeypatch: pytest.MonkeyPatch, p: TeamTerritoryParams) -> None:
