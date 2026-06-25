@@ -215,33 +215,141 @@
     },
     "lobby": {
       "title": "Lobby",
-      "room": "Room: {roomId}",
-      "roomId": "Room ID",
-      "teams": "Teams:",
-      "teamN": "team {team}",
       "readyFlag": "ready",
-      "ready": "Ready"
+      "ready": "Ready",
+      "cancelReady": "Cancel ready",
+      "startHint": "At least 2 players on 2 different teams must press Ready. The match starts when everyone is ready.",
+      "startHintSoloDebug": "Test mode: pick a team and press Ready — the match starts with one player.",
+      "debugSoloBanner": "DEBUG: solo test mode (dev only)",
+      "pickTeam": "Pick your team",
+      "connecting": "Connecting to server…",
+      "myTeam": "Your team",
+      "opponents": "Opponents",
+      "playersCount": "{n} players in lobby",
+      "teamPlayers": "{count} players",
+      "emptyTeam": "No players yet",
+      "waitingAllReady": "{ready} / {total} ready",
+      "needTwoTeams": "Need ready players on at least 2 teams to start",
+      "needMinPlayers": "At least 2 players are required to start",
+      "teamsImbalanced": "Teams are unbalanced (difference ≥ 2 players). Switch teams before pressing Ready.",
+      "you": "(you)"
+    },
+    "guide": "Guide",
+    "guideOk": "OK",
+    "guideSections": [
+      {
+        "title": "Goal",
+        "html": "<p>Paint the grid <b>your team color</b>. More cells at the end = win. You can earn 💎.</p>"
+      },
+      {
+        "title": "How to play",
+        "html": "<ul><li>Pick a team and press <b>Ready</b>. The match starts when everyone is ready and at least 2 teams are in.</li><li>Watch the <b>Tick</b> timer on the right — each round closes on a timer. Tap a cell before it ends.</li><li><b>Gray</b> cell = <b>1 paint</b>. <b>Enemy</b> cell (not a combo) = <b>2 paint</b> — you must confirm first.</li><li>If several players tap the same cell, only one paints it.</li></ul>"
+      },
+      {
+        "title": "Paint and Challenge",
+        "html": "<ul><li>Paint <b>regenerates</b> over time. You can <b>buy</b> more with 💎.</li><li><b>Challenge</b> is a quick minigame (math, letter, or numbers). Correct answers give +paint.</li></ul>"
+      },
+      {
+        "title": "Combos",
+        "html": "<p><b>Three in a row</b> of your color is a combo: +1 to the final score. Those cells <b>glow</b> and <b>cannot be repainted</b>.</p>"
+      },
+      {
+        "title": "Score and rewards",
+        "html": "<ul><li>1 cell = 1 point. Combos add a bonus.</li><li>Win — <b>+50 💎</b>, loss or tie — <b>+10 💎</b>.</li><li>If nobody acts for too long — match is cancelled, no rewards.</li></ul>"
+      }
+    ],
+    "teams": {
+      "red": "Red",
+      "blue": "Blue",
+      "green": "Green",
+      "purple": "Purple",
+      "yellow": "Yellow"
     },
     "match": {
       "tick": "Tick #{tick}",
+      "tickShort": "Tick",
       "tickCloseIn": "Tick closes in: {seconds} s",
       "paint": "Paint: {cur} / {max}",
       "opponentInk": "Opponent ink (sum): {sum}",
+      "opponentInkShort": "Opponent ink",
+      "opponentInkTeam": "{name}: {sum}",
+      "teamScores": "Territory",
       "stall": "No actions — draw in {seconds} s",
-      "buyPaint": "Buy +{amount} ({cost} 💎)"
+      "buyPaint": "Buy +{amount} ({cost} 💎)",
+      "challenge": "Challenge",
+      "regenIn": "+1 paint in {seconds} s",
+      "comboCount": "Your combos (×3): {count}"
+    },
+    "repaint": {
+      "title": "Repaint this cell?",
+      "cost": "Cost = {cost}",
+      "confirm": "Repaint",
+      "cancel": "Cancel"
+    },
+    "toasts": {
+      "not_enough_diamonds": "Not enough diamonds for this purchase",
+      "too_much_paint": "Challenge unavailable: more than {max} paint",
+      "paint_full": "Paint is already full",
+      "max_buys": "Purchase limit reached for this match",
+      "cooldown": "Challenge is on cooldown",
+      "not_playing": "Match is not in progress",
+      "paintBought": "Purchased +{amount} paint",
+      "teamsImbalanced": "Cannot start: one team has 2+ more players. Rebalance teams first.",
+      "invite_cooldown": "Invite available again in 2 minutes",
+      "not_enough_paint": "Not enough paint",
+      "notEnoughPaint": "You need at least {cost} paint",
+      "invalid_claim": "Cannot claim this cell"
+    },
+    "invite": {
+      "button": "Invite players",
+      "cooldown": "Invite in {seconds} s",
+      "sent": "Invite sent to all online players",
+      "title": "Team Territory",
+      "body": "{user} invites you to play"
     },
     "finish": {
       "title": "Match finished",
       "scores": "Team scores",
       "winners": "Winning teams",
-      "backToLobby": "Back to lobby"
+      "backToLobby": "Back to lobby",
+      "reward": "You earned +{diamonds} 💎",
+      "rewardWin": "Victory! +{diamonds} 💎",
+      "rewardLoss": "Consolation prize: +{diamonds} 💎",
+      "rewardTie": "Tie — +{diamonds} 💎 each",
+      "noReward": "No diamond reward this match",
+      "staleIdleTitle": "Match cancelled due to inactivity",
+      "staleIdleNoReward": "Players were idle too long — no rewards. Play an active round next time.",
+      "voidTitle": "Match cancelled",
+      "voidNoReward": "No rewards. Play a fair match with opponents.",
+      "tie": "Tie",
+      "territory": "Territory: {n}",
+      "comboBonus": "Combo bonus: {combos}×3 → +{bonus}",
+      "balanceBonus": "Balance bonus: +{bonus}",
+      "total": "Total: {n}",
+      "reason": {
+        "time_up": "Time is up",
+        "board_full": "The board is full",
+        "stale_idle": "Draw — no activity (no rewards)",
+        "opponent_left": "Opponents left — match cancelled (no rewards)",
+        "one_sided_idle": "Draw — only one team played for 5 minutes (no rewards)"
+      }
     },
     "challenge": {
-      "title": "Challenge · mode {mode}",
+      "title": "Challenge",
+      "modeMath": "Math",
+      "modeSpell": "Spelling",
+      "modeSequence": "Order",
       "deadline": "Round deadline: {time}",
+      "deadlineCountdown": "sec left",
       "submit": "Submit",
       "letter": "Letter",
-      "next": "Next"
+      "next": "Next",
+      "roundSuccess": "Correct! +{paint} paint",
+      "roundOk": "Correct!",
+      "roundFail": "Wrong or time out",
+      "countdown": "Next round in {seconds}…",
+      "sessionDone": "Challenge complete",
+      "cooldown": "Challenge in {seconds} s"
     }
   },
   "tama": {

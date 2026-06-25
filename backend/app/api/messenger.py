@@ -22,7 +22,7 @@ from app.db.models import (
     UserLastIp,
 )
 from app.db.session import get_db
-from app.integrations.users_api import sync_diamonds_to_sessions, users_api
+from app.integrations.users_api import assign_user_other_data, sync_diamonds_to_sessions, users_api
 from app.messaging.push import push_to_users
 
 router = APIRouter(prefix="/api/messenger", tags=["messenger"])
@@ -648,8 +648,8 @@ async def transfer_diamonds(
         r_new = r_cur + a
         s_other["diamonds"] = s_new
         r_other["diamonds"] = r_new
-        sender_u.other_data = s_other
-        recipient_u.other_data = r_other
+        assign_user_other_data(sender_u, s_other)
+        assign_user_other_data(recipient_u, r_other)
         db.flush()
         seq = _alloc_seq(db, body.chat_id)
         meta = json.dumps({"amount": a, "commission": f, "total_debit": total, "to_user_id": body.to_user_id})

@@ -11,13 +11,31 @@ from typing import Any, Callable
 
 from app.core.config import settings
 from app.games.team_territory.challenge import ChallengeSession, load_spelling_words, pick_mode
+from app.games.team_territory.combos import register_new_combos
 from app.games.team_territory.constants import TeamTerritoryParams, tt_params
 from app.games.team_territory.grid import cap_c_for_tick, cell_total, grid_size_from_P
-from app.games.team_territory.teams import assign_team_id, teams_public_meta
+from app.games.team_territory.rewards import player_match_reward_diamonds, player_match_reward_kind
+from app.games.team_territory.teams import teams_public_meta
 
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def claim_paint_cost(room: TerritoryRoom, cell: int, team_id: int) -> int | None:
+    """Стоимость заявки: 1 на нейтральную, repaint_cost на чужую. None — заявка недопустима."""
+    if not (0 <= cell < len(room.cells)):
+        return None
+    if cell in room.combo_cells:
+        return None
+    owner = room.cells[cell]
+    if owner == -1:
+        return 1
+    if owner == team_id:
+        return None
+    if owner >= 0:
+        return room.params().repaint_cost
+    return None
 
 
 @dataclass
@@ -65,12 +83,38 @@ class TerritoryRoom:
     finish_reason: str | None = None
     winning_team_ids: list[int] = field(default_factory=list)
     scores: dict[int, int] = field(default_factory=dict)
+    combo_counts: dict[int, int] = field(default_factory=dict)
+    combo_bonus: dict[int, int] = field(default_factory=dict)
+    balance_bonus: dict[int, int] = field(default_factory=dict)
+    final_scores: dict[int, int] = field(default_factory=dict)
+    match_team_sizes: dict[int, int] = field(default_factory=dict)
+    completed_triples: set[tuple[int, int, int]] = field(default_factory=set)
+    combo_cells: set[int] = field(default_factory=set)
     ready_deadline_at: datetime | None = None
+    lobby_idle_since: datetime | None = None
+    invite_cooldown_until: datetime | None = None
+    invite_broadcast_until: datetime | None = None
+    invite_broadcast_by: str | None = None
+    insufficient_teams_online_since: datetime | None = None
+    team_last_activity_at: dict[int, datetime] = field(default_factory=dict)
     join_seq: int = 0
     _rng: random.Random = field(default_factory=lambda: random.Random(secrets.randbits(128)))
 
     def params(self) -> TeamTerritoryParams:
         return tt_params()
+
+    def lobby_team_player_counts(self) -> dict[int, int]:
+        counts = {i: 0 for i in range(self.num_teams)}
+        for pl in self.active_players():
+            if 0 <= pl.team_id < self.num_teams:
+                counts[pl.team_id] += 1
+        return counts
+
+    def lobby_teams_imbalanced(self, *, max_diff: int = 2) -> bool:
+        counts = list(self.lobby_team_player_counts().values())
+        if not counts:
+            return False
+        return max(counts) - min(counts) >= max_diff
 
     def active_players(self) -> list[PlayerSlot]:
         return [p for p in self.players.values() if p.role == "player"]
@@ -81,33 +125,59 @@ class TerritoryRoom:
     def teams_represented(self, plist: list[PlayerSlot]) -> set[int]:
         return {p.team_id for p in plist}
 
-    def can_start_match(self, now: datetime) -> bool:
+    def connected_teams_online(self) -> set[int]:
+        out: set[int] = set()
+        for pl in self.active_players():
+            if not pl.connected:
+                continue
+            if 0 <= pl.team_id < self.num_teams:
+                out.add(pl.team_id)
+        return out
+
+    def _track_insufficient_teams_online(self, now: datetime) -> None:
+        if len(self.connected_teams_online()) >= 2:
+            self.insufficient_teams_online_since = None
+        elif self.insufficient_teams_online_since is None:
+            self.insufficient_teams_online_since = now
+
+    def maybe_finish_opponent_left(self, now: datetime) -> bool:
+        """Досрочный финиш, если онлайн осталась одна команда дольше grace."""
+        if self.phase != "playing":
+            return False
+        self._track_insufficient_teams_online(now)
+        since = self.insufficient_teams_online_since
+        if since is None:
+            return False
+        grace = self.params().opponent_left_grace_sec
+        if (now - since).total_seconds() < grace:
+            return False
+        self._finish_match(now, "opponent_left")
+        return True
+
+    def _ready_meets_min_start(self, ready: list[PlayerSlot]) -> bool:
+        """Минимум 2 готовых игрока в 2 разных командах (п. 3 GAME_RULES)."""
         p = self.params()
+        if len(ready) < max(2, p.min_participants):
+            return False
+        return len(self.teams_represented(ready)) >= 2
+
+    def can_start_match(self, now: datetime) -> bool:
         ready = self.ready_players()
         if len(ready) < 1:
             return False
-        teams = self.teams_represented(ready)
-        debug = settings.team_territory_debug_solo_lobby and settings.gamehub_env != "production"
-        if debug:
-            return len(self.active_players()) >= 1
+        p = self.params()
         if len(self.active_players()) < max(2, p.min_participants):
             return False
-        if len(ready) < 2:
+        if not self._ready_meets_min_start(ready):
             return False
-        if len(teams) < 2:
+        if self.lobby_teams_imbalanced():
             return False
-        if self.ready_deadline_at and now >= self.ready_deadline_at:
-            return True
-        return all(p.ready for p in self.active_players())
+        return all(pl.ready for pl in self.active_players())
 
     def start_match(self, now: datetime) -> None:
         p = self.params()
         participants = [x for x in self.active_players() if x.ready]
-        if settings.team_territory_debug_solo_lobby and settings.gamehub_env != "production":
-            participants = list(self.active_players())
-            if not participants:
-                return
-        elif len(participants) < 2 or len(self.teams_represented(participants)) < 2:
+        if not self._ready_meets_min_start(participants):
             return
         self.match_id = str(uuid.uuid4())
         self.g = grid_size_from_P(len(participants), p)
@@ -125,6 +195,15 @@ class TerritoryRoom:
         self.finish_reason = None
         self.winning_team_ids = []
         self.scores = {i: 0 for i in range(self.num_teams)}
+        self.combo_counts = {i: 0 for i in range(self.num_teams)}
+        self.combo_bonus = {i: 0 for i in range(self.num_teams)}
+        self.balance_bonus = {i: 0 for i in range(self.num_teams)}
+        self.final_scores = {i: 0 for i in range(self.num_teams)}
+        self.match_team_sizes = {i: 0 for i in range(self.num_teams)}
+        self.completed_triples = set()
+        self.combo_cells = set()
+        self.insufficient_teams_online_since = None
+        self.team_last_activity_at = {}
         for pl in self.players.values():
             pl.claim_cell = None
             if pl in participants:
@@ -135,6 +214,7 @@ class TerritoryRoom:
                 pl.challenges_started_match = 0
                 pl.last_challenge_started_at = None
                 pl.challenge = None
+                self.match_team_sizes[pl.team_id] = self.match_team_sizes.get(pl.team_id, 0) + 1
             elif pl.role == "player":
                 # не готов к старту — переводим в наблюдатели
                 pl.role = "spectator"
@@ -143,11 +223,71 @@ class TerritoryRoom:
                 pl.claim_cell = None
         self._update_stall_deadlines(now)
 
-    def touch_activity(self, now: datetime) -> None:
+    def lobby_idle_expired(self, now: datetime) -> bool:
+        """П. 3: если долго нет условий для старта — закрыть лобби."""
+        if self.phase != "lobby":
+            return False
+        p = self.params()
+        if self.can_start_match(now):
+            return False
+        if len(self.active_players()) >= max(2, p.min_participants):
+            ready = self.ready_players()
+            if self._ready_meets_min_start(ready):
+                return False
+        anchor = self.lobby_idle_since or self.created_at
+        return (now - anchor).total_seconds() >= p.lobby_idle_close_sec
+
+    def reset_idle_lobby(self, now: datetime) -> None:
+        self.players.clear()
+        self.spectator_queue_next.clear()
+        self.ready_deadline_at = None
+        self.lobby_idle_since = now
+        self.created_at = now
+
+    def touch_activity(self, now: datetime, *, team_id: int | None = None) -> None:
         self.last_significant_activity_at = now
         self.stall_phase = "none"
+        if team_id is not None and 0 <= team_id < self.num_teams:
+            self.team_last_activity_at[team_id] = now
         if self.phase == "playing":
             self._update_stall_deadlines(now)
+
+    def teams_in_match(self) -> set[int]:
+        return {t for t, n in self.match_team_sizes.items() if n > 0}
+
+    def maybe_finish_one_sided_idle(self, now: datetime) -> bool:
+        """Ничья, если 5+ минут действия только у одной команды."""
+        if self.phase != "playing":
+            return False
+        teams = self.teams_in_match()
+        if len(teams) < 2:
+            return False
+        window = self.params().one_sided_idle_sec
+        active_in_window = {
+            t
+            for t in teams
+            if (lat := self.team_last_activity_at.get(t)) is not None
+            and (now - lat).total_seconds() < window
+        }
+        if len(active_in_window) != 1:
+            return False
+        only_team = next(iter(active_in_window))
+        other_anchor: datetime | None = None
+        for t in teams:
+            if t == only_team:
+                continue
+            lat = self.team_last_activity_at.get(t)
+            anchor = lat if lat is not None else self.match_started_at
+            if anchor is None:
+                continue
+            if other_anchor is None or anchor > other_anchor:
+                other_anchor = anchor
+        if other_anchor is None:
+            return False
+        if (now - other_anchor).total_seconds() >= window:
+            self._finish_match(now, "one_sided_idle")
+            return True
+        return False
 
     def _update_stall_deadlines(self, now: datetime) -> None:
         p = self.params()
@@ -157,6 +297,10 @@ class TerritoryRoom:
 
     def maybe_finish_stall_or_timer(self, now: datetime) -> None:
         if self.phase != "playing":
+            return
+        if self.maybe_finish_opponent_left(now):
+            return
+        if self.maybe_finish_one_sided_idle(now):
             return
         if self.stall_hard_deadline_at and now >= self.stall_hard_deadline_at:
             self._finish_match(now, "stale_idle")
@@ -172,11 +316,25 @@ class TerritoryRoom:
     def _finish_match(self, now: datetime, reason: str) -> None:
         self.phase = "finished"
         self.finish_reason = reason
+        p = self.params()
+        bonus_pts = max(0, int(p.combo_bonus_points))
+        sizes = self.match_team_sizes or {i: 0 for i in range(self.num_teams)}
+        active_sizes = [c for c in sizes.values() if c > 0]
+        max_size = max(active_sizes) if active_sizes else 1
         for t in range(self.num_teams):
-            self.scores[t] = sum(1 for c in self.cells if c == t)
-        best = max(self.scores.values()) if self.scores else 0
-        self.winning_team_ids = [tid for tid, sc in self.scores.items() if sc == best and best > 0]
-        if reason == "stale_idle":
+            territory = sum(1 for c in self.cells if c == t)
+            combo = self.combo_counts.get(t, 0) * bonus_pts
+            team_size = sizes.get(t, 0)
+            balance = 0
+            if team_size > 0 and team_size < max_size:
+                balance = int(round(territory * (max_size / team_size - 1)))
+            self.scores[t] = territory
+            self.combo_bonus[t] = combo
+            self.balance_bonus[t] = balance
+            self.final_scores[t] = territory + combo + balance
+        best = max(self.final_scores.values()) if self.final_scores else 0
+        self.winning_team_ids = [tid for tid, sc in self.final_scores.items() if sc == best and best > 0]
+        if reason in ("stale_idle", "opponent_left", "one_sided_idle"):
             self.winning_team_ids = []
 
     def process_tick(self, now: datetime) -> dict[str, Any]:
@@ -211,7 +369,8 @@ class TerritoryRoom:
             if pl.claim_cell is None:
                 continue
             cell = pl.claim_cell
-            if not (0 <= cell < len(self.cells)) or self.cells[cell] != -1 or pl.paint < 1:
+            cost = claim_paint_cost(self, cell, pl.team_id)
+            if cost is None or pl.paint < cost:
                 continue
             raw.append(
                 {
@@ -219,6 +378,7 @@ class TerritoryRoom:
                     "cell": cell,
                     "team_id": pl.team_id,
                     "personal_cells": pl.personal_cells,
+                    "paint_cost": cost,
                 }
             )
 
@@ -235,16 +395,29 @@ class TerritoryRoom:
         for pl in active:
             pl.claim_cell = None
 
+        painted: list[int] = []
         for w in winners:
             pl = self.players.get(w["username"])
             if pl is None:
                 continue
             cell = w["cell"]
-            if not (0 <= cell < len(self.cells)) or self.cells[cell] != -1 or pl.paint < 1:
+            cost = int(w.get("paint_cost") or claim_paint_cost(self, cell, pl.team_id) or 0)
+            if cost <= 0 or claim_paint_cost(self, cell, pl.team_id) is None or pl.paint < cost:
                 continue
             self.cells[cell] = pl.team_id
-            pl.paint -= 1
+            pl.paint -= cost
             pl.personal_cells += 1
+            painted.append(cell)
+
+        if painted:
+            register_new_combos(
+                self.cells,
+                self.g,
+                painted,
+                self.completed_triples,
+                self.combo_counts,
+                self.combo_cells,
+            )
 
         self.tick_index += 1
         self.next_tick_at = now + timedelta(milliseconds=p.tick_ms)
@@ -295,10 +468,20 @@ class TerritoryRoom:
         self.finish_reason = None
         self.winning_team_ids = []
         self.scores = {}
+        self.combo_counts = {}
+        self.combo_bonus = {}
+        self.balance_bonus = {}
+        self.final_scores = {}
+        self.match_team_sizes = {}
+        self.completed_triples = set()
+        self.combo_cells = set()
         self.stall_phase = "none"
         self.stall_warn_deadline_at = None
         self.stall_hard_deadline_at = None
         self.last_significant_activity_at = None
+        self.insufficient_teams_online_since = None
+        self.team_last_activity_at = {}
+        self.lobby_idle_since = now
         for u in list(self.spectator_queue_next):
             pl = self.players.get(u)
             if pl and pl.role == "spectator":
@@ -308,8 +491,7 @@ class TerritoryRoom:
             pl.ready = False
             pl.claim_cell = None
             pl.paint = 0
-        p = self.params()
-        self.ready_deadline_at = now + timedelta(seconds=p.ready_timeout_sec)
+        self.ready_deadline_at = None
 
     def snapshot(
         self,
@@ -331,6 +513,22 @@ class TerritoryRoom:
         if me and me.challenge:
             ch_pub = me.challenge.to_public_dict(now)
 
+        challenge_cooldown_until = None
+        if me and me.last_challenge_started_at:
+            until = me.last_challenge_started_at + timedelta(seconds=p.challenge_cooldown_sec)
+            if until > now:
+                challenge_cooldown_until = until.isoformat()
+
+        me_reward_kind = None
+        me_reward_diamonds = None
+        if self.phase == "finished" and me:
+            me_reward_kind = player_match_reward_kind(self, me, p)
+            me_reward_diamonds = player_match_reward_diamonds(self, me, p)
+
+        tick_closes_in_ms = (
+            max(0, int((self.next_tick_at - now).total_seconds() * 1000)) if self.next_tick_at else None
+        )
+
         return {
             "room_id": self.room_id,
             "phase": self.phase,
@@ -340,6 +538,8 @@ class TerritoryRoom:
             "cell_total": len(self.cells),
             "cells": list(self.cells),
             "tick_index": self.tick_index,
+            "server_now": now.isoformat(),
+            "tick_closes_in_ms": tick_closes_in_ms,
             "next_tick_at": self.next_tick_at.isoformat() if self.next_tick_at else None,
             "match_started_at": self.match_started_at.isoformat() if self.match_started_at else None,
             "match_end_at": self.match_end_at.isoformat() if self.match_end_at else None,
@@ -347,6 +547,14 @@ class TerritoryRoom:
             "finish_reason": self.finish_reason,
             "winning_team_ids": list(self.winning_team_ids),
             "scores": dict(self.scores),
+            "combo_counts": {str(k): v for k, v in sorted(self.combo_counts.items())},
+            "combo_bonus": {str(k): v for k, v in sorted(self.combo_bonus.items())},
+            "balance_bonus": {str(k): v for k, v in sorted(self.balance_bonus.items())},
+            "match_team_sizes": {str(k): v for k, v in sorted(self.match_team_sizes.items())},
+            "lobby_teams_imbalanced": self.lobby_teams_imbalanced() if self.phase == "lobby" else False,
+            "final_scores": {str(k): v for k, v in sorted(self.final_scores.items())},
+            "combo_cells": sorted(self.combo_cells),
+            "tick_claims": tick_claims_snapshot(self),
             "players": {
                 u: {
                     "username": s.username,
@@ -365,9 +573,14 @@ class TerritoryRoom:
                 "role": me.role if me else None,
                 "ready": me.ready if me else None,
                 "paint": me.paint if me else None,
+                "claim_cell": me.claim_cell if me else None,
                 "spectator_queue_position": (self.spectator_queue_next.index(viewer) + 1)
                 if viewer in self.spectator_queue_next
                 else None,
+                "challenge_cooldown_until": challenge_cooldown_until,
+                "next_regen_at": me.next_regen_at.isoformat() if me and me.next_regen_at else None,
+                "match_reward_kind": me_reward_kind,
+                "match_reward_diamonds": me_reward_diamonds,
             },
             "opponent_ink": opp_ink,
             "stall": {"phase": self.stall_phase, "deadline_at": stall_deadline_iso},
@@ -380,12 +593,41 @@ class TerritoryRoom:
                 "bundle": p.bundle,
                 "max_buys_per_match": p.max_buys_per_match,
                 "challenge_cooldown_sec": p.challenge_cooldown_sec,
-                "debug_solo_lobby": bool(
-                    settings.team_territory_debug_solo_lobby and settings.gamehub_env != "production"
-                ),
+                "challenge_riddle_sec": p.challenge_riddle_sec,
+                "challenge_math_sec": p.challenge_math_sec,
+                "challenge_sequence_sec": p.challenge_sequence_sec,
+                "combo_bonus_points": p.combo_bonus_points,
+                "repaint_cost": p.repaint_cost,
+                "challenge_max_paint_start": p.challenge_max_paint_start,
+                "regen_sec": p.regen_sec,
+                "win_diamonds": p.win_diamonds,
+                "loss_diamonds": p.loss_diamonds,
+                "tie_diamonds": p.tie_diamonds,
+                "min_ticks_for_reward": p.min_ticks_for_reward,
+                "ready_timeout_sec": p.ready_timeout_sec,
             },
             "ready_deadline_at": self.ready_deadline_at.isoformat() if self.ready_deadline_at else None,
+            "invite_cooldown_until": (
+                self.invite_cooldown_until.isoformat()
+                if self.invite_cooldown_until and self.invite_cooldown_until > now
+                else None
+            ),
         }
+
+
+def tick_claims_snapshot(room: TerritoryRoom) -> dict[str, list[int]]:
+    """Заявки на клетки в текущем тике: cell -> уникальные team_id."""
+    if room.phase != "playing":
+        return {}
+    by_cell: dict[int, set[int]] = {}
+    for pl in room.active_players():
+        if pl.claim_cell is None:
+            continue
+        cell = pl.claim_cell
+        if claim_paint_cost(room, cell, pl.team_id) is None:
+            continue
+        by_cell.setdefault(cell, set()).add(pl.team_id)
+    return {str(k): sorted(v) for k, v in sorted(by_cell.items())}
 
 
 def opponent_ink_snapshot(room: TerritoryRoom, viewer: str) -> dict[str, Any]:
@@ -402,6 +644,15 @@ def opponent_ink_snapshot(room: TerritoryRoom, viewer: str) -> dict[str, Any]:
     return {"sum": s, "by_team": {str(k): v for k, v in sorted(by_team.items())}}
 
 
+def default_team_id(room: TerritoryRoom) -> int:
+    """Команда с наименьшим числом игроков в лобби (стартовый выбор)."""
+    counts = {i: 0 for i in range(room.num_teams)}
+    for pl in room.players.values():
+        if pl.role == "player" and 0 <= pl.team_id < room.num_teams:
+            counts[pl.team_id] = counts.get(pl.team_id, 0) + 1
+    return min(counts.keys(), key=lambda tid: (counts[tid], tid))
+
+
 def add_player(
     room: TerritoryRoom,
     username: str,
@@ -414,12 +665,11 @@ def add_player(
         pl.connected = True
         return pl
     room.join_seq += 1
-    tid = assign_team_id(room.join_seq, room.num_teams)
+    tid = default_team_id(room)
     pl = PlayerSlot(username=username, team_id=tid, role=role, join_order=room.join_seq)
     room.players[username] = pl
-    p = room.params()
-    if room.phase == "lobby" and room.ready_deadline_at is None:
-        room.ready_deadline_at = now + timedelta(seconds=p.ready_timeout_sec)
+    if room.phase == "lobby" and room.lobby_idle_since is None:
+        room.lobby_idle_since = now
     return pl
 
 
@@ -442,6 +692,8 @@ def start_challenge_if_allowed(
     if pl.last_challenge_started_at:
         if now < pl.last_challenge_started_at + timedelta(seconds=p.challenge_cooldown_sec):
             return None, "cooldown"
+    if pl.paint > p.challenge_max_paint_start:
+        return None, "too_much_paint"
     mode = pick_mode(p, random.Random(secrets.randbits(64)))
     sid = str(uuid.uuid4())
     sess = ChallengeSession(
@@ -456,7 +708,7 @@ def start_challenge_if_allowed(
     pl.challenge = sess
     pl.challenges_started_match += 1
     pl.last_challenge_started_at = now
-    room.touch_activity(now)
+    room.touch_activity(now, team_id=pl.team_id)
     return sess, None
 
 
@@ -502,7 +754,7 @@ def handle_challenge_answer(
             result["paint_awarded"] = 1
         result["success"] = ok
         advance_session_after_round()
-        room.touch_activity(now)
+        room.touch_activity(now, team_id=pl.team_id)
         return result, None
 
     # mode 3 — последовательность 1…10
@@ -510,26 +762,28 @@ def handle_challenge_answer(
     if timed_out:
         result["success"] = False
         advance_session_after_round()
-        room.touch_activity(now)
+        room.touch_activity(now, team_id=pl.team_id)
         return result, None
 
     if seq_label is None or int(seq_label) != sess.sequence_next:
         result["success"] = False
         advance_session_after_round()
-        room.touch_activity(now)
+        room.touch_activity(now, team_id=pl.team_id)
         return result, None
 
     sess.sequence_next += 1
+    if sess.sequence_layout is not None:
+        sess.sequence_layout = [c for c in sess.sequence_layout if int(c.get("label", -1)) != int(seq_label)]
     if sess.sequence_next > 10:
         if pl.paint < p.paint_max:
             pl.paint += 1
             result["paint_awarded"] = 1
         result["success"] = True
         advance_session_after_round()
-        room.touch_activity(now)
+        room.touch_activity(now, team_id=pl.team_id)
         return result, None
 
     result["success"] = True
     result["session_done"] = False
-    room.touch_activity(now)
+    room.touch_activity(now, team_id=pl.team_id)
     return result, None

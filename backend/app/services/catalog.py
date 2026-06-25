@@ -37,7 +37,7 @@ def default_catalog_other_data() -> dict:
                 "game_author": None,
                 "creator_avatar_url": None,
                 "creator_message": "",
-                "status": "coming_soon",
+                "status": "released",
             },
             settings.minecraft_2d_online_game_key: {
                 "title": "Minecraft 2D Online",

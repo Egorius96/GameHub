@@ -18,6 +18,7 @@ from app.api.messenger import router as messenger_router
 from app.api.game_creators import router as game_creators_router
 from app.api.team_territory import router as team_territory_router
 from app.api.minecraft_2d_online import router as minecraft_2d_online_router
+from app.api.notifications import router as notifications_router
 from app.core.config import assert_team_territory_prod_safety
 from app.ws.game import router as ws_router
 from app.ws.rps_ws import router as ws_rps_router
@@ -75,6 +76,7 @@ app.include_router(messenger_router)
 app.include_router(game_creators_router)
 app.include_router(team_territory_router)
 app.include_router(minecraft_2d_online_router)
+app.include_router(notifications_router)
 app.include_router(ws_router)
 app.include_router(ws_rps_router)
 app.include_router(ws_tamagochi_router)

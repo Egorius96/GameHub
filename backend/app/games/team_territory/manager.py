@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
+from datetime import timedelta
 from typing import Any
 
 from fastapi import WebSocket
 
 from app.core.config import settings
-from app.games.team_territory.challenge import load_spelling_words
+from app.games.team_territory.challenge import load_spelling_words, normalize_spelling_locale
 from app.games.team_territory.room_engine import (
     TerritoryRoom,
     add_player,
+    claim_paint_cost,
     handle_challenge_answer,
     opponent_ink_snapshot,
     start_challenge_if_allowed,
@@ -26,22 +28,24 @@ class TeamTerritoryManager:
     rooms: dict[str, TerritoryRoom] = field(default_factory=dict)
     connections: dict[str, dict[str, WebSocket]] = field(default_factory=dict)
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
-    spelling_words: list[str] = field(default_factory=list)
+    spelling_words_by_locale: dict[str, list[str]] = field(default_factory=dict)
     _reward_granted: set[str] = field(default_factory=set)  # match_id:username in-memory guard
 
-    def ensure_spelling_words(self) -> None:
-        if not self.spelling_words:
+    def spelling_words_for(self, locale: str) -> list[str]:
+        loc = normalize_spelling_locale(locale)
+        if loc not in self.spelling_words_by_locale:
             from app.games.team_territory.constants import tt_params
 
-            self.spelling_words = load_spelling_words(tt_params())
+            self.spelling_words_by_locale[loc] = load_spelling_words(tt_params(), loc)
+        return self.spelling_words_by_locale[loc]
 
-    def get_or_create_room(self, room_id: str, num_teams: int = 2) -> TerritoryRoom:
+    def get_or_create_room(self, room_id: str, num_teams: int = 4) -> TerritoryRoom:
         lo, hi = team_count_bounds()
         nt = max(lo, min(hi, int(num_teams)))
         if room_id not in self.rooms:
             self.rooms[room_id] = TerritoryRoom(room_id=room_id, num_teams=nt)
         r = self.rooms[room_id]
-        if r.num_teams != nt and r.phase == "lobby" and not r.players:
+        if r.num_teams != nt and r.phase == "lobby":
             r.num_teams = nt
         return r
 
@@ -89,8 +93,11 @@ class TeamTerritoryManager:
         async with self.lock:
             now = utcnow()
             for room_id, room in list(self.rooms.items()):
-                if room.phase == "lobby" and room.can_start_match(now):
-                    room.start_match(now)
+                if room.phase == "lobby":
+                    if room.lobby_idle_expired(now):
+                        room.reset_idle_lobby(now)
+                    elif room.can_start_match(now):
+                        room.start_match(now)
                 elif room.phase == "playing":
                     room.maybe_finish_stall_or_timer(now)
                     if room.phase == "playing":
@@ -104,7 +111,6 @@ class TeamTerritoryManager:
 
     async def handle_client_message(self, room_id: str, username: str, data: dict[str, Any]) -> dict[str, Any] | None:
         """Обработка действия игрока. Возвращает extra ответ для отправителю (опционально)."""
-        self.ensure_spelling_words()
         async with self.lock:
             room = self.rooms.get(room_id)
             if not room:
@@ -114,8 +120,24 @@ class TeamTerritoryManager:
 
             if t == "set_ready":
                 pl = room.players.get(username)
-                if pl and pl.role == "player":
-                    pl.ready = bool(data.get("ready"))
+                if pl and pl.role == "player" and room.phase == "lobby":
+                    want_ready = bool(data.get("ready"))
+                    if want_ready and room.lobby_teams_imbalanced():
+                        return {"error": "teams_imbalanced"}
+                    pl.ready = want_ready
+                    if room.can_start_match(now):
+                        room.start_match(now)
+                return None
+
+            if t == "set_team":
+                pl = room.players.get(username)
+                if not pl or pl.role != "player" or room.phase != "lobby":
+                    return {"error": "not_lobby"}
+                tid = data.get("team_id")
+                if not isinstance(tid, int) or not (0 <= tid < room.num_teams):
+                    return {"error": "bad_team"}
+                pl.team_id = tid
+                pl.ready = False
                 return None
 
             if t == "claim":
@@ -123,16 +145,23 @@ class TeamTerritoryManager:
                 if pl and pl.role == "player" and room.phase == "playing":
                     cell = data.get("cell")
                     if isinstance(cell, int):
+                        cost = claim_paint_cost(room, cell, pl.team_id)
+                        if cost is None:
+                            return {"error": "invalid_claim"}
+                        if pl.paint < cost:
+                            return {"error": "not_enough_paint"}
                         pl.claim_cell = cell
                         pl.claim_submitted = True
-                        room.touch_activity(now)
+                        room.touch_activity(now, team_id=pl.team_id)
                 return None
 
             if t == "buy_paint":
                 return {"defer": "buy_paint", "room_id": room_id, "username": username}
 
             if t == "challenge_start":
-                sess, err = start_challenge_if_allowed(room, username, now, self.spelling_words)
+                locale = normalize_spelling_locale(str(data.get("locale") or "en"))
+                words = self.spelling_words_for(locale)
+                sess, err = start_challenge_if_allowed(room, username, now, words)
                 if err:
                     return {"error": err}
                 return {"challenge": sess.to_public_dict(now) if sess else None}
@@ -151,10 +180,21 @@ class TeamTerritoryManager:
                     room.reset_to_lobby(now)
                 return None
 
+            if t == "invite_players":
+                pl = room.players.get(username)
+                if not pl or room.phase != "lobby":
+                    return {"error": "not_lobby"}
+                if room.invite_cooldown_until and now < room.invite_cooldown_until:
+                    return {"error": "invite_cooldown"}
+                room.invite_cooldown_until = now + timedelta(seconds=120)
+                room.invite_broadcast_until = now + timedelta(seconds=8)
+                room.invite_broadcast_by = username
+                return None
+
             if t == "set_num_teams":
                 if room.phase == "lobby" and not room.players:
                     lo, hi = team_count_bounds()
-                    n = int(data.get("num_teams") or 2)
+                    n = int(data.get("num_teams") or 4)
                     room.num_teams = max(lo, min(hi, n))
                 return None
 

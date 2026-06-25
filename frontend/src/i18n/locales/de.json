@@ -200,33 +200,141 @@
     },
     "lobby": {
       "title": "Lobby",
-      "room": "Raum: {roomId}",
-      "roomId": "Raum-ID",
-      "teams": "Teams:",
-      "teamN": "Team {team}",
       "readyFlag": "bereit",
-      "ready": "Bereit"
+      "ready": "Bereit",
+      "cancelReady": "Bereit abbrechen",
+      "startHint": "Mindestens 2 Spieler in 2 verschiedenen Teams. Das Match startet, wenn alle bereit sind.",
+      "startHintSoloDebug": "Testmodus: Team wählen und Bereit — das Match startet allein.",
+      "debugSoloBanner": "DEBUG: Solo-Test (nur dev)",
+      "pickTeam": "Team wählen",
+      "connecting": "Verbindung zum Server…",
+      "myTeam": "Dein Team",
+      "opponents": "Gegner",
+      "playersCount": "{n} Spieler in der Lobby",
+      "teamPlayers": "{count} Spieler",
+      "emptyTeam": "Noch niemand",
+      "waitingAllReady": "Bereit: {ready} / {total}",
+      "needTwoTeams": "Mindestens 2 Teams mit bereiten Spielern nötig",
+      "needMinPlayers": "Mindestens 2 Spieler zum Start nötig",
+      "teamsImbalanced": "Teams unausgeglichen (Differenz ≥ 2). Wechsle das Team vor «Bereit».",
+      "you": "(du)"
+    },
+    "guide": "Anleitung",
+    "guideOk": "OK",
+    "guideSections": [
+      {
+        "title": "Ziel",
+        "html": "<p>Male das Feld in <b>deiner Teamfarbe</b>. Mehr Zellen am Ende = Sieg. Du kannst 💎 bekommen.</p>"
+      },
+      {
+        "title": "So spielt man",
+        "html": "<ul><li>Team wählen und <b>Bereit</b> drücken.</li><li>Rechts läuft der <b>Tick</b>-Timer — jede Runde endet nach einer Weile. Zelle antippen, bevor er abläuft.</li><li><b>Grau</b> = <b>1 Farbe</b>. <b>Fremde</b> Zelle (kein Combo) = <b>2 Farben</b>, mit Bestätigung.</li><li>Mehrere auf eine Zelle — nur einer malt sie.</li></ul>"
+      },
+      {
+        "title": "Farbe & Challenge",
+        "html": "<ul><li>Farbe <b>regeneriert</b> sich. Kauf mit 💎 möglich.</li><li><b>Challenge</b>: Minispiel — richtige Antwort gibt +Farbe.</li></ul>"
+      },
+      {
+        "title": "Combos",
+        "html": "<p><b>Drei in einer Reihe</b> = Combo: +1 zum Endscore. Diese Zellen <b>leuchten</b> und sind <b>geschützt</b>.</p>"
+      },
+      {
+        "title": "Punkte & Belohnungen",
+        "html": "<ul><li>1 Zelle = 1 Punkt. Combos geben Bonus.</li><li>Sieg <b>+50 💎</b>, Niederlage oder Unentschieden <b>+10 💎</b>.</li><li>Lange keine Aktion — Match abgebrochen, keine Belohnung.</li></ul>"
+      }
+    ],
+    "teams": {
+      "red": "Rot",
+      "blue": "Blau",
+      "green": "Grün",
+      "purple": "Lila",
+      "yellow": "Gelbe"
     },
     "match": {
       "tick": "Tick #{tick}",
+      "tickShort": "Tick",
       "tickCloseIn": "Tick schließt in: {seconds} s",
       "paint": "Farbe: {cur} / {max}",
       "opponentInk": "Gegnerfarbe (Summe): {sum}",
+      "opponentInkShort": "Gegnerfarbe",
+      "opponentInkTeam": "{name}: {sum}",
+      "teamScores": "Territorium",
       "stall": "Keine Aktionen — Unentschieden in {seconds} s",
-      "buyPaint": "Kaufen +{amount} ({cost} 💎)"
+      "buyPaint": "Kaufen +{amount} ({cost} 💎)",
+      "challenge": "Challenge",
+      "regenIn": "+1 Farbe in {seconds} s",
+      "comboCount": "Deine Combos (×3): {count}"
+    },
+    "repaint": {
+      "title": "Feld übermalen?",
+      "cost": "Kosten = {cost}",
+      "confirm": "Übermalen",
+      "cancel": "Abbrechen"
+    },
+    "toasts": {
+      "not_enough_diamonds": "Nicht genug Diamanten",
+      "too_much_paint": "Challenge nicht verfügbar: mehr als {max} Farbe",
+      "paint_full": "Farbe ist voll",
+      "max_buys": "Kauflimit erreicht",
+      "cooldown": "Challenge lädt noch",
+      "not_playing": "Match läuft nicht",
+      "paintBought": "+{amount} Farbe gekauft",
+      "teamsImbalanced": "Start nicht möglich: ein Team hat 2+ Spieler mehr. Teams ausgleichen.",
+      "invite_cooldown": "Einladung in 2 Minuten wieder verfügbar",
+      "not_enough_paint": "Nicht genug Farbe",
+      "notEnoughPaint": "Mindestens {cost} Farbe nötig",
+      "invalid_claim": "Dieses Feld kann nicht beansprucht werden"
+    },
+    "invite": {
+      "button": "Spieler einladen",
+      "cooldown": "Einladen in {seconds} s",
+      "sent": "Einladung an alle Spieler gesendet",
+      "title": "Team Territory",
+      "body": "{user} lädt zum Spielen ein"
     },
     "finish": {
       "title": "Match beendet",
       "scores": "Team-Punkte",
       "winners": "Gewinner-Teams",
-      "backToLobby": "Zurück zur Lobby"
+      "backToLobby": "Zurück zur Lobby",
+      "reward": "Du hast +{diamonds} 💎 erhalten",
+      "rewardWin": "Sieg! +{diamonds} 💎",
+      "rewardLoss": "Trostpreis: +{diamonds} 💎",
+      "rewardTie": "Unentschieden — je +{diamonds} 💎",
+      "noReward": "Keine Diamanten in diesem Match",
+      "staleIdleTitle": "Match wegen Inaktivität abgebrochen",
+      "staleIdleNoReward": "Zu lange keine Aktionen — keine Belohnungen. Spiele eine aktive Runde.",
+      "voidTitle": "Match abgebrochen",
+      "voidNoReward": "Keine Belohnungen. Spiele ein faires Match mit Gegnern.",
+      "tie": "Unentschieden",
+      "territory": "Territorium: {n}",
+      "comboBonus": "Combo-Bonus: {combos}×3 → +{bonus}",
+      "balanceBonus": "Ausgleichsbonus: +{bonus}",
+      "total": "Gesamt: {n}",
+      "reason": {
+        "time_up": "Zeit abgelaufen",
+        "board_full": "Feld voll",
+        "stale_idle": "Unentschieden — keine Aktivität (keine Belohnungen)",
+        "opponent_left": "Gegner offline — Match abgebrochen (keine Belohnungen)",
+        "one_sided_idle": "Unentschieden — nur ein Team spielte 5 Min. (keine Belohnungen)"
+      }
     },
     "challenge": {
-      "title": "Challenge · Modus {mode}",
+      "title": "Challenge",
+      "modeMath": "Mathe",
+      "modeSpell": "Wörter",
+      "modeSequence": "Reihenfolge",
       "deadline": "Runden-Deadline: {time}",
+      "deadlineCountdown": "Sek",
       "submit": "Antworten",
       "letter": "Buchstabe",
-      "next": "Nächster"
+      "next": "Nächster",
+      "roundSuccess": "Richtig! +{paint} Farbe",
+      "roundOk": "Richtig!",
+      "roundFail": "Falsch oder Zeit abgelaufen",
+      "countdown": "Nächste Runde in {seconds}…",
+      "sessionDone": "Challenge abgeschlossen",
+      "cooldown": "Challenge in {seconds} s"
     }
   },
   "tama": {

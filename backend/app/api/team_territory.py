@@ -45,7 +45,7 @@ async def list_rooms(_: UserSession = Depends(_session)) -> dict:
 
 class CreateRoomBody(BaseModel):
     room_id: str = Field(default="default", min_length=1, max_length=64)
-    num_teams: int = Field(default=2, ge=2, le=4)
+    num_teams: int = Field(default=4, ge=4, le=4)
 
 
 @router.post("/rooms")

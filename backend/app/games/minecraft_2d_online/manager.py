@@ -22,7 +22,7 @@ from app.games.minecraft_2d_online.tiles import (
     tile_mine_drop,
 )
 from app.games.minecraft_2d_online.world import ChunkWorld
-from app.integrations.users_api import _sync_session_diamonds, users_api
+from app.integrations.users_api import _sync_session_diamonds, assign_user_other_data, users_api
 
 # Хитбокс игрока (тайлы): py — верх, низ на py + PLAYER_H; ширина меньше клетки.
 PLAYER_W = 0.72
@@ -952,7 +952,7 @@ class Minecraft2DManager:
                         kk = list(de.keys())[-80:]
                         g["deliver_idempotency"] = {k: de[k] for k in kk}
                         games[gk] = g
-                        u.other_data = other
+                        assign_user_other_data(u, other)
                         db.commit()
                     except Exception:
                         pl.inv["raw_diamond"] = int(pl.inv.get("raw_diamond", 0)) + 1

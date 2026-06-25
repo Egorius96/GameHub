@@ -200,33 +200,141 @@
     },
     "lobby": {
       "title": "Lobby",
-      "room": "Sala: {roomId}",
-      "roomId": "ID de sala",
-      "teams": "Equipos:",
-      "teamN": "equipo {team}",
       "readyFlag": "listo",
-      "ready": "Listo"
+      "ready": "Listo",
+      "cancelReady": "Cancelar listo",
+      "startHint": "Se necesitan al menos 2 jugadores en 2 equipos distintos. La partida empieza cuando todos estén listos.",
+      "startHintSoloDebug": "Modo prueba: elige equipo y pulsa Listo — la partida empieza en solitario.",
+      "debugSoloBanner": "DEBUG: prueba en solitario (solo dev)",
+      "pickTeam": "Elige tu equipo",
+      "connecting": "Conectando al servidor…",
+      "myTeam": "Tu equipo",
+      "opponents": "Rivales",
+      "playersCount": "{n} jugadores en el lobby",
+      "teamPlayers": "{count} jugadores",
+      "emptyTeam": "Nadie todavía",
+      "waitingAllReady": "Listos: {ready} / {total}",
+      "needTwoTeams": "Hacen falta jugadores listos en al menos 2 equipos",
+      "needMinPlayers": "Se necesitan al menos 2 jugadores para empezar",
+      "teamsImbalanced": "Equipos desbalanceados (diferencia ≥ 2). Cambia de equipo antes de «Listo».",
+      "you": "(tú)"
+    },
+    "guide": "Guía",
+    "guideOk": "Entendido",
+    "guideSections": [
+      {
+        "title": "Objetivo",
+        "html": "<p>Pinta el tablero con <b>tu color</b>. Más celdas al final = victoria. Puedes ganar 💎.</p>"
+      },
+      {
+        "title": "Cómo jugar",
+        "html": "<ul><li>Elige equipo y pulsa <b>Listo</b>.</li><li>A la derecha va el temporizador <b>Tick</b> — cada ronda termina en un tiempo. Toca una celda antes.</li><li><b>Gris</b> = <b>1 pintura</b>. Celda <b>enemiga</b> (sin combo) = <b>2 pinturas</b>, con confirmación.</li><li>Varios en una celda — solo uno la pinta.</li></ul>"
+      },
+      {
+        "title": "Pintura y Challenge",
+        "html": "<ul><li>La pintura se <b>regenera</b>. Puedes <b>comprar</b> con 💎.</li><li><b>Challenge</b>: minijuego — respuesta correcta = +pintura.</li></ul>"
+      },
+      {
+        "title": "Combos",
+        "html": "<p><b>Tres en línea</b> = combo: +1 al marcador final. Esas celdas <b>brillan</b> y <b>no se pueden repintar</b>.</p>"
+      },
+      {
+        "title": "Puntuación y recompensas",
+        "html": "<ul><li>1 celda = 1 punto. Los combos dan bonus.</li><li>Victoria <b>+50 💎</b>, derrota o empate <b>+10 💎</b>.</li><li>Sin acciones mucho tiempo — partida cancelada, sin recompensas.</li></ul>"
+      }
+    ],
+    "teams": {
+      "red": "Rojos",
+      "blue": "Azules",
+      "green": "Verdes",
+      "purple": "Morados",
+      "yellow": "Amarillos"
     },
     "match": {
       "tick": "Tick #{tick}",
+      "tickShort": "Tick",
       "tickCloseIn": "Cierre del tick en: {seconds} s",
       "paint": "Pintura: {cur} / {max}",
       "opponentInk": "Pintura rival (total): {sum}",
+      "opponentInkShort": "Pintura rival",
+      "opponentInkTeam": "{name}: {sum}",
+      "teamScores": "Territorio",
       "stall": "Sin acciones — empate en {seconds} s",
-      "buyPaint": "Comprar +{amount} ({cost} 💎)"
+      "buyPaint": "Comprar +{amount} ({cost} 💎)",
+      "challenge": "Challenge",
+      "regenIn": "+1 pintura en {seconds} s",
+      "comboCount": "Tus combos (×3): {count}"
+    },
+    "repaint": {
+      "title": "¿Repintar esta celda?",
+      "cost": "Coste = {cost}",
+      "confirm": "Repintar",
+      "cancel": "Cancelar"
+    },
+    "toasts": {
+      "not_enough_diamonds": "No hay diamantes suficientes",
+      "too_much_paint": "Challenge no disponible: más de {max} pintura",
+      "paint_full": "Pintura al máximo",
+      "max_buys": "Límite de compras alcanzado",
+      "cooldown": "Challenge en recarga",
+      "not_playing": "La partida no está en curso",
+      "paintBought": "Comprado +{amount} pintura",
+      "teamsImbalanced": "No se puede empezar: un equipo tiene 2+ jugadores más. Reequilibra los equipos.",
+      "invite_cooldown": "Invitación disponible en 2 minutos",
+      "not_enough_paint": "Pintura insuficiente",
+      "notEnoughPaint": "Necesitas al menos {cost} de pintura",
+      "invalid_claim": "No puedes reclamar esta celda"
+    },
+    "invite": {
+      "button": "Invitar jugadores",
+      "cooldown": "Invitar en {seconds} s",
+      "sent": "Invitación enviada a todos los jugadores",
+      "title": "Team Territory",
+      "body": "{user} te invita a jugar"
     },
     "finish": {
       "title": "Partido terminado",
       "scores": "Puntuación por equipo",
       "winners": "Equipos ganadores",
-      "backToLobby": "Volver al lobby"
+      "backToLobby": "Volver al lobby",
+      "reward": "Has ganado +{diamonds} 💎",
+      "rewardWin": "¡Victoria! +{diamonds} 💎",
+      "rewardLoss": "Premio de consolación: +{diamonds} 💎",
+      "rewardTie": "Empate — +{diamonds} 💎 cada uno",
+      "noReward": "Sin diamantes en este partido",
+      "staleIdleTitle": "Partido cancelado por inactividad",
+      "staleIdleNoReward": "Demasiado tiempo sin acciones — sin recompensas. Juega una ronda activa.",
+      "voidTitle": "Partido cancelado",
+      "voidNoReward": "Sin recompensas. Juega una partida justa con rivales.",
+      "tie": "Empate",
+      "territory": "Territorio: {n}",
+      "comboBonus": "Bonus combo: {combos}×3 → +{bonus}",
+      "balanceBonus": "Bonus de equilibrio: +{bonus}",
+      "total": "Total: {n}",
+      "reason": {
+        "time_up": "Tiempo agotado",
+        "board_full": "Tablero completo",
+        "stale_idle": "Empate — sin actividad (sin recompensas)",
+        "opponent_left": "Rivales desconectados — partido cancelado (sin recompensas)",
+        "one_sided_idle": "Empate — solo un equipo jugó durante 5 min (sin recompensas)"
+      }
     },
     "challenge": {
-      "title": "Challenge · modo {mode}",
+      "title": "Challenge",
+      "modeMath": "Matemáticas",
+      "modeSpell": "Palabras",
+      "modeSequence": "Orden",
       "deadline": "Límite de ronda: {time}",
+      "deadlineCountdown": "seg",
       "submit": "Responder",
       "letter": "Letra",
-      "next": "Siguiente"
+      "next": "Siguiente",
+      "roundSuccess": "¡Correcto! +{paint} pintura",
+      "roundOk": "¡Correcto!",
+      "roundFail": "Error o tiempo agotado",
+      "countdown": "Siguiente ronda en {seconds}…",
+      "sessionDone": "Challenge completado",
+      "cooldown": "Challenge en {seconds} s"
     }
   },
   "tama": {

@@ -1,16 +1,24 @@
 from __future__ import annotations
 
+import copy
 from collections.abc import Callable
 from typing import Any
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.config import settings
 from app.core.reserved_usernames import is_reserved_username
 from app.db.models import GameHubUser, WarningHistory
 from app.db.session import _session_factory
 from app.services.ban_state import clear_expired_temp_ban, is_login_blocked, temp_ban_remaining_seconds, utcnow
+
+
+def assign_user_other_data(user: GameHubUser, other: dict) -> None:
+    """Persist JSONB: SQLAlchemy does not track in-place mutations on the same dict."""
+    user.other_data = copy.deepcopy(other)
+    flag_modified(user, "other_data")
 
 
 def _sync_session_diamonds(username: str, balance: int) -> None:
@@ -198,7 +206,7 @@ class UsersApiClient:
             other = ensure_gameshub_schema(u.other_data or {})
             new_val = int(other.get("diamonds", 0)) + int(delta)
             other["diamonds"] = new_val
-            u.other_data = other
+            assign_user_other_data(u, other)
             db.commit()
             _sync_session_diamonds(username, new_val)
             return new_val
@@ -237,7 +245,7 @@ class UsersApiClient:
             if new_val < 0:
                 return None
             other["diamonds"] = new_val
-            u.other_data = other
+            assign_user_other_data(u, other)
             db.commit()
             _sync_session_diamonds(username, new_val)
             return new_val
@@ -266,7 +274,7 @@ class UsersApiClient:
                 g = {}
             mutator(g)
             games[game_key] = g
-            u.other_data = other
+            assign_user_other_data(u, other)
             db.commit()
             return dict(g)
         except Exception:
@@ -332,7 +340,7 @@ class UsersApiClient:
             keys = list(ex.keys())[-100:]
             g["exchange_idempotency"] = {k: ex[k] for k in keys}
             games[gk] = g
-            u.other_data = other
+            assign_user_other_data(u, other)
             db.commit()
             _sync_session_diamonds(username, int(other["diamonds"]))
             return {
@@ -362,7 +370,7 @@ class UsersApiClient:
         if new_val < 0:
             return None
         other["diamonds"] = new_val
-        u.other_data = other
+        assign_user_other_data(u, other)
         db.flush()
         return new_val
 

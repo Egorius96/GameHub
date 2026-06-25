@@ -36,7 +36,7 @@ async def _apply_buy_paint(room_id: str, username: str) -> dict:
         new_paint = min(p.paint_max, pl.paint + bundle)
         pl.buys_in_match += 1
         pl.paint = new_paint
-        room.touch_activity(utcnow())
+        room.touch_activity(utcnow(), team_id=pl.team_id)
     bal = users_api.adjust_diamonds(username, -cost)
     if bal is None:
         async with team_territory_manager.lock:
@@ -59,9 +59,9 @@ async def team_territory_ws(websocket: WebSocket, token: str, room_id: str = "de
         return
 
     rid = (room_id or "default").strip()[:64] or "default"
-    team_territory_manager.ensure_spelling_words()
     await team_territory_manager.register_ws(rid, username, websocket)
     presence.touch(username, settings.team_territory_game_key)
+    await team_territory_manager.broadcast_room(rid)
 
     try:
         while True:

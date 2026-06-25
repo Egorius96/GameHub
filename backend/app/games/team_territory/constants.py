@@ -23,11 +23,16 @@ class TeamTerritoryParams:
     match_stall_idle_sec: int
     match_stall_warn_before_sec: int
     win_diamonds: int
+    loss_diamonds: int
+    tie_diamonds: int
     ready_timeout_sec: int
     min_participants: int
     challenge_problems: int
     challenge_riddle_sec: int
+    challenge_math_sec: int
+    challenge_sequence_sec: int
     challenge_cooldown_sec: int
+    challenge_max_paint_start: int
     challenge_round_gap_sec: int
     challenge_max_per_match: int
     challenge_weight_math: float
@@ -37,6 +42,10 @@ class TeamTerritoryParams:
     hud_ink_poll_sec: float
     min_ticks_for_reward: int
     lobby_idle_close_sec: int
+    combo_bonus_points: int
+    repaint_cost: int
+    opponent_left_grace_sec: int
+    one_sided_idle_sec: int
 
 
 def tt_params() -> TeamTerritoryParams:
@@ -56,11 +65,16 @@ def tt_params() -> TeamTerritoryParams:
         match_stall_idle_sec=int(s.tt_match_stall_idle_sec),
         match_stall_warn_before_sec=int(s.tt_match_stall_warn_before_sec),
         win_diamonds=int(s.tt_win_diamonds),
+        loss_diamonds=int(s.tt_loss_diamonds),
+        tie_diamonds=int(s.tt_tie_diamonds),
         ready_timeout_sec=int(s.tt_ready_timeout_sec),
         min_participants=int(s.tt_min_participants),
         challenge_problems=int(s.tt_challenge_problems),
         challenge_riddle_sec=int(s.tt_challenge_riddle_sec),
+        challenge_math_sec=int(s.tt_challenge_math_sec),
+        challenge_sequence_sec=int(s.tt_challenge_sequence_sec),
         challenge_cooldown_sec=int(s.tt_challenge_cooldown_sec),
+        challenge_max_paint_start=int(s.tt_challenge_max_paint_start),
         challenge_round_gap_sec=int(s.tt_challenge_round_gap_sec),
         challenge_max_per_match=int(s.tt_challenge_max_per_match),
         challenge_weight_math=float(s.tt_challenge_weight_math),
@@ -70,4 +84,8 @@ def tt_params() -> TeamTerritoryParams:
         hud_ink_poll_sec=float(s.tt_hud_ink_poll_sec),
         min_ticks_for_reward=int(s.tt_min_ticks_for_reward),
         lobby_idle_close_sec=int(s.tt_lobby_idle_close_sec),
+        combo_bonus_points=int(s.tt_combo_bonus_points),
+        repaint_cost=int(s.tt_repaint_cost),
+        opponent_left_grace_sec=max(5, int(s.tt_opponent_left_grace_sec)),
+        one_sided_idle_sec=max(60, int(s.tt_one_sided_idle_sec)),
     )

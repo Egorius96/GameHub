@@ -7,7 +7,7 @@ import type { UiLang } from '../i18n'
 import { tamagochiStatus } from '../games/tamagochi/api'
 import { playSfx, stopMusic } from '../audio/sound'
 import { startPresencePing, stopPresencePing } from '../telemetry/presence'
-import { MINECRAFT_2D_COMING_SOON, TEAM_TERRITORY_COMING_SOON } from '../config/features'
+import { MINECRAFT_2D_COMING_SOON } from '../config/features'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -441,15 +441,10 @@ function openTamagochi() {
   router.push('/tamagochi')
 }
 
-const showTeamTerritoryWipModal = ref(false)
 const showMc2dWipModal = ref(false)
 
 function openTeamTerritory() {
   playSfx('button')
-  if (TEAM_TERRITORY_COMING_SOON) {
-    showTeamTerritoryWipModal.value = true
-    return
-  }
   router.push('/games/team-territory')
 }
 
@@ -460,10 +455,6 @@ function openMinecraft2D() {
     return
   }
   router.push('/games/minecraft-2d-online')
-}
-
-function closeTeamTerritoryWipModal() {
-  showTeamTerritoryWipModal.value = false
 }
 
 function closeMc2dWipModal() {
@@ -700,7 +691,6 @@ async function confirmDeleteAccount() {
               <div class="hub-game-right">
                 <div class="hub-game-title">
                   {{ catalog[g.key]?.title ?? g.title }}
-                  <span v-if="g.key === 'team_territory' && TEAM_TERRITORY_COMING_SOON" class="hub-game-wip-badge">{{ i18nT('hub.status.inDevelopment') }}</span>
                   <span v-if="g.key === 'minecraft_2d_online' && MINECRAFT_2D_COMING_SOON" class="hub-game-wip-badge">{{ i18nT('hub.status.inDevelopment') }}</span>
                 </div>
                 <div class="hub-game-meta">
@@ -844,18 +834,6 @@ async function confirmDeleteAccount() {
             <button type="button" class="btn" :disabled="authorSubmitting" @click="submitAuthorBlock">
               {{ authorSubmitting ? i18nT('common.loading') : i18nT('hub.creator.save') }}
             </button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
-
-    <Teleport to="body">
-      <div v-if="showTeamTerritoryWipModal" class="delete-modal-backdrop" @click.self="closeTeamTerritoryWipModal">
-        <div class="delete-modal" role="dialog" aria-modal="true" aria-labelledby="tt-wip-title">
-          <h2 id="tt-wip-title" class="delete-modal-title">{{ i18nT('common.loading') }}</h2>
-          <p class="delete-modal-text">Team Territory</p>
-          <div class="delete-modal-actions">
-            <button type="button" class="btn btn-modal-cancel" @click="closeTeamTerritoryWipModal">{{ i18nT('common.ok') }}</button>
           </div>
         </div>
       </div>
