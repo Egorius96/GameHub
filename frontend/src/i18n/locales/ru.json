@@ -243,8 +243,8 @@
       "connecting": "Подключение к серверу…",
       "myTeam": "Ваша команда",
       "opponents": "Соперники",
-      "playersCount": "В лобби: {n} игроков",
-      "teamPlayers": "{count} игроков",
+      "playersCount": "В лобби: {n}/{max}",
+      "teamPlayers": "{count}/{max} игроков",
       "emptyTeam": "Пока никого",
       "waitingAllReady": "Готовы: {ready} / {total}",
       "needTwoTeams": "Для старта нужны готовые игроки минимум в 2 командах",
@@ -317,7 +317,9 @@
       "invite_cooldown": "Приглашение можно отправить через 2 минуты",
       "not_enough_paint": "Недостаточно краски",
       "notEnoughPaint": "Нужно минимум {cost} краски",
-      "invalid_claim": "Нельзя закрасить эту клетку"
+      "invalid_claim": "Нельзя закрасить эту клетку",
+      "team_full": "В команде уже максимум игроков",
+      "lobby_full": "Лобби заполнено (максимум 16 игроков)"
     },
     "invite": {
       "button": "Позвать в игру",

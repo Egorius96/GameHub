@@ -243,8 +243,8 @@
       "connecting": "Connecting to server…",
       "myTeam": "Your team",
       "opponents": "Opponents",
-      "playersCount": "{n} players in lobby",
-      "teamPlayers": "{count} players",
+      "playersCount": "{n}/{max} players in lobby",
+      "teamPlayers": "{count}/{max} players",
       "emptyTeam": "No players yet",
       "waitingAllReady": "{ready} / {total} ready",
       "needTwoTeams": "Need ready players on at least 2 teams to start",
@@ -317,7 +317,9 @@
       "invite_cooldown": "Invite available again in 2 minutes",
       "not_enough_paint": "Not enough paint",
       "notEnoughPaint": "You need at least {cost} paint",
-      "invalid_claim": "Cannot claim this cell"
+      "invalid_claim": "Cannot claim this cell",
+      "team_full": "This team is full",
+      "lobby_full": "Lobby is full (max 16 players)"
     },
     "invite": {
       "button": "Invite players",

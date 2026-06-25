@@ -24,7 +24,7 @@ from app.games.team_territory.room_engine import (
     start_challenge_if_allowed,
     utcnow,
 )
-from app.games.team_territory.teams import team_count_bounds
+from app.games.team_territory.teams import MAX_PLAYERS_IN_LOBBY, MAX_PLAYERS_PER_TEAM, team_count_bounds
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ class TeamTerritoryManager:
             r.num_teams = nt
         return r
 
-    async def register_ws(self, room_id: str, username: str, ws: WebSocket) -> TerritoryRoom:
+    async def register_ws(self, room_id: str, username: str, ws: WebSocket) -> TerritoryRoom | None:
         async with self.lock:
             room = self.get_or_create_room(room_id)
             if room.phase == "playing" and username not in room.players:
@@ -63,6 +63,8 @@ class TeamTerritoryManager:
                 if username not in room.spectator_queue_next:
                     room.spectator_queue_next.append(username)
             elif username not in room.players:
+                if room.phase == "lobby" and room.lobby_connected_count() >= MAX_PLAYERS_IN_LOBBY:
+                    return None
                 add_player(room, username, role="player", now=utcnow())
             else:
                 room.players[username].connected = True
@@ -167,6 +169,8 @@ class TeamTerritoryManager:
                 tid = data.get("team_id")
                 if not isinstance(tid, int) or not (0 <= tid < room.num_teams):
                     return {"error": "bad_team"}
+                if room.lobby_team_player_counts().get(tid, 0) >= MAX_PLAYERS_PER_TEAM:
+                    return {"error": "team_full"}
                 old_team = pl.team_id
                 pl.team_id = tid
                 pl.ready = False

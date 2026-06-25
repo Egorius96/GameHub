@@ -78,6 +78,8 @@ const g = computed(() => Math.max(1, Number(payload.value?.g ?? 10)))
 const cells = computed(() => (Array.isArray(payload.value?.cells) ? payload.value.cells : []) as number[])
 const teams = computed(() => (Array.isArray(payload.value?.teams) ? payload.value.teams : []) as any[])
 const cfg = computed(() => payload.value?.config ?? {})
+const maxPlayersPerTeam = computed(() => Number(cfg.value?.max_players_per_team ?? 4))
+const maxPlayersInLobby = computed(() => Number(cfg.value?.max_players_in_lobby ?? 16))
 const debugSoloLobby = computed(() => Boolean(cfg.value?.debug_solo_lobby))
 const challenge = computed(() => payload.value?.challenge ?? null)
 const stall = computed(() => payload.value?.stall ?? {})
@@ -457,6 +459,7 @@ const teamsWithPlayers = computed(() =>
       players: members,
       count: members.length,
       readyCount: members.filter((p) => p.ready).length,
+      isFull: members.length >= maxPlayersPerTeam.value,
     }
   }),
 )
@@ -899,7 +902,7 @@ onBeforeUnmount(() => {
       <div class="tt-lobby-head">
         <div>
           <h2 class="tt-lobby-title">{{ t('teamTerritory.lobby.title') }}</h2>
-          <p class="tt-lobby-sub">{{ t('teamTerritory.lobby.playersCount', { n: lobbyOnlineCount }) }}</p>
+          <p class="tt-lobby-sub">{{ t('teamTerritory.lobby.playersCount', { n: lobbyOnlineCount, max: maxPlayersInLobby }) }}</p>
         </div>
         <div class="tt-lobby-head-actions">
           <button type="button" class="btn btn-guide-tiny" @click="openGuide">{{ t('teamTerritory.guide') }}</button>
@@ -931,12 +934,12 @@ onBeforeUnmount(() => {
           >
             <span class="tt-team-pick-swatch" :style="{ background: tm.hex }" />
             <span class="tt-team-pick-name">{{ tm.name }}</span>
-            <span class="tt-team-pick-meta">{{ t('teamTerritory.lobby.teamPlayers', { count: tm.count }) }}</span>
+            <span class="tt-team-pick-meta">{{ t('teamTerritory.lobby.teamPlayers', { count: tm.count, max: maxPlayersPerTeam }) }}</span>
             <button
               v-if="myTeamId !== tm.id"
               type="button"
               class="btn btn-sm tt-team-join-btn"
-              :disabled="iAmReady"
+              :disabled="iAmReady || tm.isFull"
               @click="joinTeam(tm.id)"
             >
               {{ t('teamTerritory.lobby.joinTeam') }}

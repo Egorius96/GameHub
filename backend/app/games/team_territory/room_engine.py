@@ -16,7 +16,12 @@ from app.games.team_territory.constants import TeamTerritoryParams, tt_params
 from app.games.team_territory.debug import ensure_debug_phantom_team_for_rewards, team_territory_debug_solo_active
 from app.games.team_territory.grid import cap_c_for_tick, cell_total, grid_size_from_P
 from app.games.team_territory.rewards import player_match_reward_diamonds, player_match_reward_kind, match_rewards_block_reason
-from app.games.team_territory.teams import TEAM_COLORS, teams_public_meta
+from app.games.team_territory.teams import (
+    MAX_PLAYERS_IN_LOBBY,
+    MAX_PLAYERS_PER_TEAM,
+    TEAM_COLORS,
+    teams_public_meta,
+)
 
 TEAM_UNASSIGNED = -1
 
@@ -791,6 +796,8 @@ class TerritoryRoom:
                 "min_ticks_for_reward": p.min_ticks_for_reward,
                 "ready_timeout_sec": p.ready_timeout_sec,
                 "lobby_countdown_sec": p.lobby_countdown_sec,
+                "max_players_per_team": MAX_PLAYERS_PER_TEAM,
+                "max_players_in_lobby": MAX_PLAYERS_IN_LOBBY,
                 "debug_solo_lobby": team_territory_debug_solo_active(),
             },
             "ready_deadline_at": self.ready_deadline_at.isoformat() if self.ready_deadline_at else None,

@@ -59,7 +59,11 @@ async def team_territory_ws(websocket: WebSocket, token: str, room_id: str = "de
         return
 
     rid = (room_id or "default").strip()[:64] or "default"
-    await team_territory_manager.register_ws(rid, username, websocket)
+    room = await team_territory_manager.register_ws(rid, username, websocket)
+    if room is None:
+        await websocket.send_json({"type": "error", "message": "lobby_full"})
+        await websocket.close()
+        return
     presence.touch(username, settings.team_territory_game_key)
     await team_territory_manager.broadcast_room(rid)
 

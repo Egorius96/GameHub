@@ -31,7 +31,7 @@ class Settings(BaseModel):
     tt_global_cap_base: int = Field(default_factory=lambda: int(os.getenv("TT_GLOBAL_CAP_BASE", "12")))
     tt_f_n_divisor: int = Field(default_factory=lambda: int(os.getenv("TT_F_N_DIVISOR", "3")))
     tt_f_n_offset: int = Field(default_factory=lambda: int(os.getenv("TT_F_N_OFFSET", "4")))
-    tt_max_grid_g: int = Field(default_factory=lambda: int(os.getenv("TEAM_TERRITORY_MAX_GRID_G", "18")))
+    tt_max_grid_g: int = Field(default_factory=lambda: int(os.getenv("TEAM_TERRITORY_MAX_GRID_G", "14")))
     tt_match_max_sec: int = Field(default_factory=lambda: int(os.getenv("TT_MATCH_MAX_SEC", "900")))
     tt_match_stall_idle_sec: int = Field(default_factory=lambda: int(os.getenv("TT_MATCH_STALL_IDLE_SEC", "300")))
     tt_match_stall_warn_before_sec: int = Field(default_factory=lambda: int(os.getenv("TT_MATCH_STALL_WARN_BEFORE_SEC", "60")))

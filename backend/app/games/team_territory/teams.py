@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+MAX_PLAYERS_PER_TEAM = 4
+MAX_PLAYERS_IN_LOBBY = 16
+
 TEAM_COLORS: list[dict[str, str]] = [
     {"id": 0, "name": "Красные", "key": "red", "hex": "#e53935"},
     {"id": 1, "name": "Синие", "key": "blue", "hex": "#1e88e5"},

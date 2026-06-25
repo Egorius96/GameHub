@@ -7,16 +7,14 @@ from app.games.team_territory.constants import TeamTerritoryParams
 
 def grid_size_from_P(p: int, params: TeamTerritoryParams) -> int:
     """P — число игроков в матче на старте (только role=player)."""
-    if p < 6:
+    if p <= 2:
+        g = 8
+    elif p <= 8:
         g = 10
-    elif p <= 10:
+    elif p <= 12:
         g = 12
     elif p <= 16:
         g = 14
-    elif p <= 24:
-        g = 16
-    elif p <= 32:
-        g = 18
     else:
         g = params.max_grid_g
     return min(g, params.max_grid_g)
