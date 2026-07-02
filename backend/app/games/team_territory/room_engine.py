@@ -143,8 +143,8 @@ class TerritoryRoom:
         return sum(1 for p in self.active_players() if p.connected)
 
     def lobby_teams_imbalanced(self, *, max_diff: int = 2) -> bool:
-        counts = list(self.lobby_team_player_counts().values())
-        if not counts:
+        counts = [c for c in self.lobby_team_player_counts().values() if c > 0]
+        if len(counts) < 2:
             return False
         return max(counts) - min(counts) >= max_diff
 

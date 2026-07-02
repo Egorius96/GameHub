@@ -611,8 +611,8 @@ const lobbyReadyStats = computed(() => {
 })
 
 const lobbyTeamImbalanced = computed(() => {
-  const counts = teamsWithPlayers.value.map((t) => t.count)
-  if (!counts.length) return false
+  const counts = teamsWithPlayers.value.map((t) => t.count).filter((c) => c > 0)
+  if (counts.length < 2) return false
   return Math.max(...counts) - Math.min(...counts) >= 2
 })
 

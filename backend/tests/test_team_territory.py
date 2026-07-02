@@ -487,6 +487,14 @@ def test_lobby_teams_imbalanced_blocks_start() -> None:
     assert room.can_start_match(utcnow()) is False
 
 
+def test_lobby_two_vs_two_across_four_team_slots_not_imbalanced() -> None:
+    room = TerritoryRoom(room_id="t", num_teams=4)
+    for u, tid in (("a", 0), ("b", 0), ("c", 1), ("d", 1)):
+        room.players[u] = PlayerSlot(username=u, team_id=tid, role="player", ready=True, connected=True)
+    assert room.lobby_teams_imbalanced() is False
+    assert room.can_start_match(utcnow()) is True
+
+
 def test_balance_bonus_smaller_team() -> None:
     room = TerritoryRoom(room_id="t", num_teams=2)
     room.phase = "playing"
