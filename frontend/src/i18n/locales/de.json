@@ -189,7 +189,16 @@
     "rps": { "desc": "Klassisches Spiel: Bot, Online-Räume und Diamant-Einsätze." },
     "tamagochi": { "desc": "Welt der Haustiere: füttern, spielen, schlafen und andere beobachten." },
     "teamTerritory": { "desc": "Färbe das G×G-Feld schneller als die Gegner: Ticks, Farbe, Challenge und Diamant-Belohnungen." },
-    "mc2d": { "desc": "2D-Mining, Welt-Warteschlange, Staub und Tausch mit GameHub-Diamanten." }
+    "mc2d": { "desc": "2D-Mining, Welt-Warteschlange, Staub und Tausch mit GameHub-Diamanten." },
+    "pumpkinDodge": { "desc": "Weiche fallenden Kürbissen aus. Alle 20 überlebten Sekunden gibt es 1 Diamant." }
+  },
+  "pumpkinDodge": {
+    "timer": "{seconds} Sek.",
+    "survived": "Du hast durchgehalten: {seconds} Sek.",
+    "reward": "+{count} Diamanten",
+    "saveError": "Ergebnis konnte nicht gespeichert werden",
+    "empty": "Noch keine Ergebnisse",
+    "controls": "WASD bewegt. Klick auf einen Kürbis setzt ihn zurück."
   },
   "teamTerritory": {
     "nav": { "hub": "Hub" },

@@ -14,6 +14,7 @@ import RpsHubView from '../games/rps/RpsHubView.vue'
 import TamagochiWorldView from '../games/tamagochi/TamagochiWorldView.vue'
 import TeamTerritoryView from '../views/TeamTerritoryView.vue'
 import Minecraft2DOnlineView from '../views/Minecraft2DOnlineView.vue'
+import PumpkinDodgeView from '../games/pumpkin-dodge/PumpkinDodgeView.vue'
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -30,6 +31,7 @@ export const router = createRouter({
     { path: '/tamagochi', component: TamagochiWorldView },
     { path: '/games/team-territory', component: TeamTerritoryView },
     { path: '/games/minecraft-2d-online', component: Minecraft2DOnlineView },
+    { path: '/games/pumpkin-dodge', component: PumpkinDodgeView },
     { path: '/store', component: StoreView },
     { path: '/leaderboard', component: LeaderboardView }
   ]

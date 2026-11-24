@@ -47,6 +47,14 @@ def default_catalog_other_data() -> dict:
                 "creator_message": "",
                 "status": "released",
             },
+            settings.pumpkin_dodge_game_key: {
+                "title": "Pumpkin Dodge",
+                "description_code": "catalog.pumpkinDodge.desc",
+                "game_author": None,
+                "creator_avatar_url": None,
+                "creator_message": "",
+                "status": "released",
+            },
         }
     }
 

@@ -199,7 +199,18 @@
     },
     "mc2d": {
       "desc": "2D mining, world queue, dust and exchange with GameHub diamonds."
+    },
+    "pumpkinDodge": {
+      "desc": "Dodge falling pumpkins. Every 20 seconds survived is worth 1 diamond."
     }
+  },
+  "pumpkinDodge": {
+    "timer": "{seconds} sec.",
+    "survived": "You lasted: {seconds} sec.",
+    "reward": "+{count} diamonds",
+    "saveError": "Could not save the result",
+    "empty": "No results yet",
+    "controls": "WASD to move. Click a pumpkin to reset it."
   },
   "teamTerritory": {
     "nav": {

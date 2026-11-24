@@ -189,7 +189,16 @@
     "rps": { "desc": "Juego clásico: robot, salas online y apuestas con diamantes." },
     "tamagochi": { "desc": "Mundo de mascotas: alimenta, juega, duerme y observa a otros." },
     "teamTerritory": { "desc": "Pinta el campo G×G más rápido que tus rivales: ticks, pintura, Challenge y recompensas con diamantes." },
-    "mc2d": { "desc": "Minería 2D, cola al mundo, polvo e intercambio con diamantes de GameHub." }
+    "mc2d": { "desc": "Minería 2D, cola al mundo, polvo e intercambio con diamantes de GameHub." },
+    "pumpkinDodge": { "desc": "Esquiva calabazas. Cada 20 segundos sobrevivido vale 1 diamante." }
+  },
+  "pumpkinDodge": {
+    "timer": "{seconds} s",
+    "survived": "Aguantaste: {seconds} s",
+    "reward": "+{count} diamantes",
+    "saveError": "No se pudo guardar el resultado",
+    "empty": "Aún no hay resultados",
+    "controls": "WASD para mover. Clic en una calabaza para reiniciarla."
   },
   "teamTerritory": {
     "nav": { "hub": "Hub" },

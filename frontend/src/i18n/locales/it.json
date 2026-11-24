@@ -189,7 +189,16 @@
     "rps": { "desc": "Gioco classico: robot, stanze online e puntate in diamanti." },
     "tamagochi": { "desc": "Mondo di animali: nutri, gioca, dormi e osserva gli altri." },
     "teamTerritory": { "desc": "Colora il campo G×G più velocemente degli avversari: tick, vernice, Challenge e ricompense in diamanti." },
-    "mc2d": { "desc": "Scavo 2D, coda nel mondo, polvere e scambio con i diamanti di GameHub." }
+    "mc2d": { "desc": "Scavo 2D, coda nel mondo, polvere e scambio con i diamanti di GameHub." },
+    "pumpkinDodge": { "desc": "Schiva le zucche. Ogni 20 secondi sopravvissuti valgono 1 diamante." }
+  },
+  "pumpkinDodge": {
+    "timer": "{seconds} sec.",
+    "survived": "Hai resistito: {seconds} sec.",
+    "reward": "+{count} diamanti",
+    "saveError": "Impossibile salvare il risultato",
+    "empty": "Nessun risultato",
+    "controls": "WASD per muoverti. Clic su una zucca per riportarla su."
   },
   "teamTerritory": {
     "nav": { "hub": "Hub" },

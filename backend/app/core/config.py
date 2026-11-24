@@ -16,6 +16,7 @@ class Settings(BaseModel):
     tamagochi_game_key: str = "tamagochi_world_game"
     team_territory_game_key: str = "team_territory"
     minecraft_2d_online_game_key: str = "minecraft_2d_online"
+    pumpkin_dodge_game_key: str = "pumpkin_dodge"
     """development | production — при production запрещён TEAM_TERRITORY_DEBUG_SOLO_LOBBY."""
     gamehub_env: str = Field(default_factory=lambda: (os.getenv("GAMEHUB_ENV") or "development").strip().lower())
     team_territory_debug_solo_lobby: bool = Field(

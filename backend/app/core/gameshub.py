@@ -52,6 +52,9 @@ def _ensure_game_progress_defaults(game_key: str, progress: dict) -> dict:
     elif game_key == settings.team_territory_game_key:
         progress.setdefault("playtime", 0)
         progress.setdefault("match_rewards", {})
+    elif game_key == settings.pumpkin_dodge_game_key:
+        progress.setdefault("playtime", 0)
+        progress.setdefault("high_score_seconds", 0)
     elif game_key == settings.minecraft_2d_online_game_key:
         progress.setdefault("playtime", 0)
         progress.setdefault("diamond_dust", 0)

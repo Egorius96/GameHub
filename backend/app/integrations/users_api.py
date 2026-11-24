@@ -40,6 +40,7 @@ def default_gamehub_other_data() -> dict[str, Any]:
     tamagochi_key = settings.tamagochi_game_key
     tt_key = settings.team_territory_game_key
     mc2d_key = settings.minecraft_2d_online_game_key
+    pumpkin_key = settings.pumpkin_dodge_game_key
     return {
         "diamonds": 0,
         "ui_lang": "en",
@@ -82,6 +83,7 @@ def default_gamehub_other_data() -> dict[str, Any]:
                 "exchange_idempotency": {},
                 "deliver_idempotency": {},
             },
+            pumpkin_key: {"playtime": 0, "high_score_seconds": 0},
         },
     }
 

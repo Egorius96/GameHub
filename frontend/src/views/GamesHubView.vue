@@ -7,7 +7,7 @@ import type { UiLang } from '../i18n'
 import { tamagochiStatus } from '../games/tamagochi/api'
 import { playSfx, stopMusic } from '../audio/sound'
 import { startPresencePing, stopPresencePing } from '../telemetry/presence'
-import { MINECRAFT_2D_COMING_SOON } from '../config/features'
+import { MINECRAFT_2D_COMING_SOON, SHOW_GAME_CREATORS } from '../config/features'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -105,6 +105,8 @@ const teamTerritoryOnline = computed(() => Number(presence.value.by_game?.team_t
 const teamTerritoryTime = computed(() => Number(gamesProgress.value?.team_territory?.playtime ?? 0))
 const mc2dOnline = computed(() => Number(presence.value.by_game?.minecraft_2d_online ?? 0))
 const mc2dTime = computed(() => Number(gamesProgress.value?.minecraft_2d_online?.playtime ?? 0))
+const pumpkinOnline = computed(() => Number(presence.value.by_game?.pumpkin_dodge ?? 0))
+const pumpkinTime = computed(() => Number(gamesProgress.value?.pumpkin_dodge?.playtime ?? 0))
 
 function hubOnlineCount(key: string): number {
   if (key === 'misha_pro_racing_game') return proRacingOnline.value
@@ -112,6 +114,7 @@ function hubOnlineCount(key: string): number {
   if (key === 'tamagochi_world_game') return tamagochiOnline.value
   if (key === 'team_territory') return teamTerritoryOnline.value
   if (key === 'minecraft_2d_online') return mc2dOnline.value
+  if (key === 'pumpkin_dodge') return pumpkinOnline.value
   return 0
 }
 
@@ -457,6 +460,11 @@ function openMinecraft2D() {
   router.push('/games/minecraft-2d-online')
 }
 
+function openPumpkinDodge() {
+  playSfx('button')
+  router.push('/games/pumpkin-dodge')
+}
+
 function closeMc2dWipModal() {
   showMc2dWipModal.value = false
 }
@@ -488,6 +496,7 @@ function hubGameOpenClass(key: string): string {
   if (key === 'tamagochi_world_game') return 'hub-game-open-btn--tama'
   if (key === 'team_territory') return 'hub-game-open-btn--tt'
   if (key === 'minecraft_2d_online') return 'hub-game-open-btn--mc2d'
+  if (key === 'pumpkin_dodge') return 'hub-game-open-btn--pumpkin'
   return ''
 }
 
@@ -527,6 +536,7 @@ const gamesForTop = computed(() => {
     { key: 'tamagochi_world_game', title: 'Tamagochi World', open: openTamagochi },
     { key: 'team_territory', title: 'Team Territory', open: openTeamTerritory },
     { key: 'minecraft_2d_online', title: 'Minecraft 2D Online', open: openMinecraft2D },
+    { key: 'pumpkin_dodge', title: 'Pumpkin Dodge', open: openPumpkinDodge },
   ]
   return [...list].sort((a, b) => (Number(counts[b.key] ?? 0) - Number(counts[a.key] ?? 0)) || a.key.localeCompare(b.key))
 })
@@ -679,6 +689,7 @@ async function confirmDeleteAccount() {
                     👍 {{ likes.counts[g.key] ?? 0 }}
                   </button>
                   <button
+                    v-if="SHOW_GAME_CREATORS"
                     type="button"
                     class="btn hub-creator-toggle hub-side-action"
                     :title="openCreatorKey === g.key ? i18nT('hub.creator.toggleHide') : i18nT('hub.creator.toggleShow')"
@@ -699,6 +710,7 @@ async function confirmDeleteAccount() {
                   <span v-if="g.key === 'tamagochi_world_game'" style="opacity:0.75;">{{ fmtPlaytime(tamagochiTime) }}</span>
                   <span v-if="g.key === 'team_territory'" style="opacity:0.75;">{{ fmtPlaytime(teamTerritoryTime) }}</span>
                   <span v-if="g.key === 'minecraft_2d_online'" style="opacity:0.75;">{{ fmtPlaytime(mc2dTime) }}</span>
+                  <span v-if="g.key === 'pumpkin_dodge'" style="opacity:0.75;">{{ fmtPlaytime(pumpkinTime) }}</span>
                 </div>
                 <div class="hub-game-desc">
                   {{ i18nT(String(catalog[g.key]?.description_code ?? '')) }}
@@ -706,7 +718,7 @@ async function confirmDeleteAccount() {
                 <div v-if="likes.my_vote === g.key" class="hub-voted-badge">{{ i18nT('common.saved') }}</div>
               </div>
             </div>
-            <div v-show="openCreatorKey === g.key" class="hub-creator-panel">
+            <div v-if="SHOW_GAME_CREATORS" v-show="openCreatorKey === g.key" class="hub-creator-panel">
               <div class="hub-creator-row">
                 <div class="hub-creator-avatar-wrap">
                   <img
@@ -1057,6 +1069,12 @@ async function confirmDeleteAccount() {
 }
 .hub-game-open-btn--mc2d::before {
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.65) 100%);
+}
+.hub-game-open-btn--pumpkin {
+  background-image: url('/assets/games/pumpkin-dodge/game_background.png');
+}
+.hub-game-open-btn--pumpkin::before {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.25) 0%, rgba(0, 0, 0, 0.72) 100%);
 }
 .hub-game-open-label {
   position: relative;
