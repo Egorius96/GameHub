@@ -10,6 +10,7 @@ const WIDTH = 1000
 const HEIGHT = 600
 const SPRITE = 100
 const STEP_MS = 1000 / 60
+const SPEED_GAIN = 0.00065
 const ASSET = '/assets/games/pumpkin-dodge'
 const GAME_KEY = 'pumpkin_dodge'
 
@@ -115,7 +116,7 @@ function step(): void {
   for (const p of pumpkins) {
     const prevY = p.y
     p.y += p.speed
-    p.speed += 0.0005
+    p.speed += SPEED_GAIN
     const crossed =
       p.x < player.x + SPRITE &&
       p.x + SPRITE > player.x &&
